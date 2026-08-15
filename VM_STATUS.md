@@ -43,6 +43,21 @@ Captured before any script run:
 | 6 | 2026-08-15 | Added Step 7 to disable-defender.ps1: hide Virus & threat protection area (`UILockdown=1`), hide WS tray, remove SecurityHealth auto-start. Added matching undo to restore-defender.ps1. Ran in VM. | **PASS** — `UILockdown=1`, `DisableNotifications=1`, SecurityHealth Run value removed. Defender engine disabled AND its Windows Security page hidden. Reversible via restore-defender.ps1. |
 | 7 | 2026-08-15 | Added auto-re-enable WATCHDOG: new `enforce-defender-disabled.ps1` + Step 8 in disable-defender.ps1 registering two SYSTEM scheduled tasks (`GSMShield_DefenderWatchdog` every 30 min, `..._Boot` at startup). Removal added to restore Step 0. | Fixed two false starts (Register-ScheduledTask `TimeSpan::MaxValue`; schtasks `/RI`+`/SC ONSTART` conflict). Switched to two schtasks tasks. **Both register (Ready).** |
 | 8 | 2026-08-15 | **End-to-end watchdog test**: injected drift (WinDefend Start=2), triggered the SYSTEM task via `schtasks /Run` | **PASS** — task restored WinDefend + all driver services to Start=4; watchdog log confirms "DONE: Defender disable re-enforced." Auto-re-enable protection works. |
+| 9 | 2026-08-15 | Reboot test of BOOT watchdog (drift injected before reboot) | **Found real bug**: boot task ran as SYSTEM but FAILED to re-disable WinDefend while it was running (fixed the 4 driver services only). Root cause: enforce script used file-only `takeown`/`icacls` (no-ops on registry) + took ownership as Administrators (blocked on a running WinDefend). |
+| 10 | 2026-08-15 | Fixed enforce script: take ownership as **LocalSystem** + drop file-only takeown/icacls; tested against running WinDefend (Start=2) | **PASS** — re-disabled WinDefend to Start=4 while the service was Running. |
+| 11 | 2026-08-15 | Enabled auto-login; injected drift; **rebooted** and let the boot watchdog run unattended | **PASS** — auto-login worked; boot watchdog auto-detected drift (WinDefend Start=2) and restored Start=4 with no manual action. Full unattended reboot scenario verified. |
+
+## Verified capabilities (on real Windows 10 22H2 VM)
+
+- Defender services permanently disabled (Start=4), **survives reboot**.
+- Windows Security "Virus & threat protection" page hidden (`UILockdown`), notifications
+  suppressed, WS tray removed.
+- **Auto-re-enable watchdog** (two SYSTEM scheduled tasks: every 30 min + at every boot)
+  re-disables Defender if Windows/Windows Update turns it back on — including WinDefend
+  while it is actively running (LocalSystem ownership).
+- Fully reversible via `restore-defender.ps1` (removes watchdog tasks first, restores
+  services, MpPreference, policies, UI, and WSC registration).
+- All PowerShell scripts are pure ASCII and parser-clean.
 
 ## Strategy decision (per product owner)
 
@@ -72,6 +87,7 @@ Captured before any script run:
 1. ~~Reboot the VM and confirm WinDefend does not start.~~ **DONE — PASS.**
 2. ~~Hide Defender from Windows Security UI.~~ **DONE — PASS (UILockdown).**
 3. ~~Add auto-re-enable watchdog.~~ **DONE — PASS (SYSTEM scheduled tasks).**
-4. Reboot the VM and confirm the watchdog auto-runs at boot and Defender stays disabled.
+4. ~~Confirm watchdog auto-runs at boot and re-disables WinDefend.~~ **DONE — PASS.**
 5. Optional: GSM driver compatibility (auto exclusions + Test Mode toggle).
-6. Rebuild installer on host with sanitized scripts; full install test in VM.
+6. Rebuild installer on host with sanitized scripts; full install test in VM
+   (validate the installer's [Run] step wires the watchdog + hide-UI end-to-end).
