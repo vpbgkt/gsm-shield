@@ -541,6 +541,48 @@ try {
 Write-Host ""
 
 # ==============================================================================
+# STEP 7: Hide Defender areas in the Windows Security app
+# Even with the service disabled, Windows Security still LISTS Windows Defender
+# as the AV provider (shown as "off / needs attention"), which nags the user.
+# These policies hide the relevant Windows Security pages so the machine does
+# not surface Defender at all. Fully reversible via restore-defender.ps1.
+# ==============================================================================
+Write-Host "--- Step 7: Hiding Defender areas in Windows Security ---"
+
+$wsCenter = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center"
+
+# 7a. Hide the "Virus & threat protection" area (UILockdown = 1)
+try {
+    $vtpPath = "$wsCenter\Virus and threat protection"
+    if (-not (Test-Path $vtpPath)) { New-Item -Path $vtpPath -Force | Out-Null }
+    Set-ItemProperty -Path $vtpPath -Name "UILockdown" -Value 1 -Type DWord -Force
+    Write-Host "SUCCESS: Hid the Virus & threat protection area (UILockdown=1)"
+    $successCount++
+} catch {
+    Write-Host "FAILED: Hide Virus & threat protection area: $($_.Exception.Message)"
+    $failCount++
+}
+
+# 7b. Hide the tray/notification icon of the Windows Security app entirely
+try {
+    $sysTray = "$wsCenter\Systray"
+    if (-not (Test-Path $sysTray)) { New-Item -Path $sysTray -Force | Out-Null }
+    Set-ItemProperty -Path $sysTray -Name "HideSystray" -Value 1 -Type DWord -Force
+    # Also prevent the Windows Security tray process from auto-starting
+    $runPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+    if (Test-Path $runPath) {
+        Remove-ItemProperty -Path $runPath -Name "SecurityHealth" -ErrorAction SilentlyContinue
+    }
+    Write-Host "SUCCESS: Hid Windows Security tray icon"
+    $successCount++
+} catch {
+    Write-Host "FAILED: Hide Windows Security tray: $($_.Exception.Message)"
+    $failCount++
+}
+
+Write-Host ""
+
+# ==============================================================================
 # SUMMARY
 # ==============================================================================
 Write-Host "=========================================="

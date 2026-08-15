@@ -39,6 +39,18 @@ Captured before any script run:
 | 2 | 2026-08-15 | Sanitized all 3 scripts to pure ASCII (UTF-8 no BOM); re-validated with PS parser | All 3 scripts: no parse errors |
 | 3 | 2026-08-15 | Ran fixed disable-defender.ps1 in VM (elevated) | **WinDefend Start=4 verified: True**; WdNisSvc/WdFilter/WdBoot Start=4; RealTimeProtection=False; exit 0. Step 4 (scheduled-task disable) failed 4x — tasks not present on this build (non-critical). |
 | 4 | 2026-08-15 | **Rebooted VM and re-checked state** | **PASS — disable survives reboot.** WinDefend/WdNisSvc/WdFilter/WdBoot Start=4; `Get-MpComputerStatus` now FAILS ("general error") = WinDefend service did not start = Defender inactive. This is the intended success signal. |
+| 5 | 2026-08-15 | Checked what Windows Security still shows (SecurityCenter2) | Even with service disabled, `SecurityCenter2` STILL lists "Windows Defender" (productState 397568) shown as off → user would still see Defender nagging. Decision: hide the UI. |
+| 6 | 2026-08-15 | Added Step 7 to disable-defender.ps1: hide Virus & threat protection area (`UILockdown=1`), hide WS tray, remove SecurityHealth auto-start. Added matching undo to restore-defender.ps1. Ran in VM. | **PASS** — `UILockdown=1`, `DisableNotifications=1`, SecurityHealth Run value removed. Defender engine disabled AND its Windows Security page hidden. Reversible via restore-defender.ps1. |
+
+## Strategy decision (per product owner)
+
+- **No code signing.** Therefore "show GSM Shield as the AV in Windows Security" is
+  NOT achievable (Windows requires an Authenticode/MVI-signed binary). Goal changed to:
+  **fully neutralize Defender + hide it from the user's view.**
+- Target users are GSM technicians whose drivers/flash tools are blocked by Defender;
+  they consent to disabling/removing Defender. `restore-defender.ps1` keeps it reversible.
+- Achieved so far: permanent service disable (survives reboot) + hidden Virus & threat
+  protection UI + suppressed notifications.
 
 ## Key learnings
 
@@ -54,9 +66,9 @@ Captured before any script run:
 ## Next steps
 
 1. ~~Reboot the VM and confirm WinDefend does not start.~~ **DONE — PASS.**
-2. Test register-wsc.ps1 — requires the app exe present (script exits 1 if the exe
-   is missing). Needs either a full install or a stubbed exe path.
-3. Rebuild installer on host with sanitized scripts; full install test in VM.
-4. Note: WSC "shows as active AV in Windows Security UI" fundamentally requires a
-   code-signed (Authenticode/MVI) binary — registry-only registration may not
-   surface in the UI regardless. Disable of Defender is confirmed working.
+2. ~~Hide Defender from Windows Security UI.~~ **DONE — PASS (UILockdown).**
+3. Reboot again and confirm the Virus & threat protection page is actually gone
+   from the Windows Security app (needs a look at the running app).
+4. Add auto-re-enable **watchdog** in GSMShieldAVService (re-apply Start=4 if Windows resets it).
+5. Optional: GSM driver compatibility (auto exclusions + Test Mode toggle).
+6. Rebuild installer on host with sanitized scripts; full install test in VM.

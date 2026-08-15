@@ -222,6 +222,29 @@ try {
     Write-Host "INFO: Could not restore tray icon: $($_.Exception.Message)"
 }
 
+# Un-hide the Virus & threat protection area (remove UILockdown policy)
+try {
+    $vtpPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center\Virus and threat protection"
+    if (Test-Path $vtpPath) {
+        Remove-Item -Path $vtpPath -Recurse -Force -ErrorAction Stop
+        Write-Host "SUCCESS: Restored Virus & threat protection area"
+    }
+} catch {
+    Write-Host "INFO: Could not restore Virus & threat protection area: $($_.Exception.Message)"
+}
+
+# Restore the Windows Security tray process auto-start (SecurityHealth Run value)
+try {
+    $runPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+    $existing = (Get-ItemProperty -Path $runPath -Name "SecurityHealth" -ErrorAction SilentlyContinue).SecurityHealth
+    if (-not $existing) {
+        Set-ItemProperty -Path $runPath -Name "SecurityHealth" -Value "%windir%\system32\SecurityHealthSystray.exe" -Type ExpandString -Force
+        Write-Host "SUCCESS: Restored SecurityHealth tray auto-start"
+    }
+} catch {
+    Write-Host "INFO: Could not restore SecurityHealth Run value: $($_.Exception.Message)"
+}
+
 # Clean up Security Center policy key if empty
 try {
     $secCenterPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender Security Center"
