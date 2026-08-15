@@ -38,6 +38,7 @@ Captured before any script run:
 | 1 | 2026-08-15 | Found PS syntax error in disable-defender.ps1 (em-dash mojibake `â€"` inside a string created a stray quote → runaway string) | Root cause identified |
 | 2 | 2026-08-15 | Sanitized all 3 scripts to pure ASCII (UTF-8 no BOM); re-validated with PS parser | All 3 scripts: no parse errors |
 | 3 | 2026-08-15 | Ran fixed disable-defender.ps1 in VM (elevated) | **WinDefend Start=4 verified: True**; WdNisSvc/WdFilter/WdBoot Start=4; RealTimeProtection=False; exit 0. Step 4 (scheduled-task disable) failed 4x — tasks not present on this build (non-critical). |
+| 4 | 2026-08-15 | **Rebooted VM and re-checked state** | **PASS — disable survives reboot.** WinDefend/WdNisSvc/WdFilter/WdBoot Start=4; `Get-MpComputerStatus` now FAILS ("general error") = WinDefend service did not start = Defender inactive. This is the intended success signal. |
 
 ## Key learnings
 
@@ -52,6 +53,10 @@ Captured before any script run:
 
 ## Next steps
 
-1. Reboot the VM and confirm WinDefend does not start (Defender inactive).
-2. Test register-wsc.ps1 in the VM; inspect WSC provider keys + SecurityCenter2.
-3. Rebuild installer on host with sanitized scripts; full install test.
+1. ~~Reboot the VM and confirm WinDefend does not start.~~ **DONE — PASS.**
+2. Test register-wsc.ps1 — requires the app exe present (script exits 1 if the exe
+   is missing). Needs either a full install or a stubbed exe path.
+3. Rebuild installer on host with sanitized scripts; full install test in VM.
+4. Note: WSC "shows as active AV in Windows Security UI" fundamentally requires a
+   code-signed (Authenticode/MVI) binary — registry-only registration may not
+   surface in the UI regardless. Disable of Defender is confirmed working.
