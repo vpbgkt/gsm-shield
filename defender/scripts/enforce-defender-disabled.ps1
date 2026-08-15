@@ -40,20 +40,36 @@ function Get-StartValue($name) {
 function Set-ServiceDisabled($name) {
     $regPs = "HKLM:\SYSTEM\CurrentControlSet\Services\$name"
     if (-not (Test-Path $regPs)) { return $null }
-    # Take ownership + grant Administrators full control, then set Start=4.
-    try { & takeown /f "HKLM\SYSTEM\CurrentControlSet\Services\$name" /d y 2>&1 | Out-Null } catch { }
-    try { & icacls "HKLM\SYSTEM\CurrentControlSet\Services\$name" /grant Administrators:F 2>&1 | Out-Null } catch { }
-    try { & reg add "HKLM\SYSTEM\CurrentControlSet\Services\$name" /v Start /t REG_DWORD /d 4 /f 2>&1 | Out-Null } catch { }
-    # .NET fallback (works when running as SYSTEM)
+
+    # The Defender service keys are owned by TrustedInstaller. To modify them we
+    # must take ownership as LocalSystem (NOT Administrators) and grant LocalSystem
+    # FullControl, then set Start=4. This is the same approach disable-defender.ps1
+    # uses successfully, and it works even while WinDefend (a protected process) is
+    # running. NOTE: takeown.exe / icacls operate on files, NOT registry keys, so
+    # they are intentionally not used here.
+    $sub = "SYSTEM\CurrentControlSet\Services\$name"
+    $sysSid = New-Object System.Security.Principal.SecurityIdentifier([System.Security.Principal.WellKnownSidType]::LocalSystemSid, $null)
+
+    # 1) Take ownership as LocalSystem
     try {
-        $sub = "SYSTEM\CurrentControlSet\Services\$name"
-        $adminSid = New-Object System.Security.Principal.SecurityIdentifier([System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
         $k = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($sub, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree, [System.Security.AccessControl.RegistryRights]::TakeOwnership)
-        if ($k) { $acl = $k.GetAccessControl([System.Security.AccessControl.AccessControlSections]::None); $acl.SetOwner($adminSid); $k.SetAccessControl($acl); $k.Close() }
-        $k = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($sub, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree, [System.Security.AccessControl.RegistryRights]::ChangePermissions)
-        if ($k) { $acl = $k.GetAccessControl(); $rule = New-Object System.Security.AccessControl.RegistryAccessRule($adminSid, 'FullControl', 'ContainerInherit', 'None', 'Allow'); $acl.SetAccessRule($rule); $k.SetAccessControl($acl); $k.Close() }
-        Set-ItemProperty -Path $regPs -Name 'Start' -Value 4 -Type DWord -Force -ErrorAction SilentlyContinue
+        if ($k) { $acl = $k.GetAccessControl([System.Security.AccessControl.AccessControlSections]::None); $acl.SetOwner($sysSid); $k.SetAccessControl($acl); $k.Close() }
     } catch { }
+
+    # 2) Grant LocalSystem FullControl
+    try {
+        $k = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($sub, [Microsoft.Win32.RegistryKeyPermissionCheck]::ReadWriteSubTree, [System.Security.AccessControl.RegistryRights]::ChangePermissions)
+        if ($k) { $acl = $k.GetAccessControl(); $rule = New-Object System.Security.AccessControl.RegistryAccessRule($sysSid, 'FullControl', 'ContainerInherit', 'None', 'Allow'); $acl.SetAccessRule($rule); $k.SetAccessControl($acl); $k.Close() }
+    } catch { }
+
+    # 3) Set Start=4 (try the .NET writer with the now-granted rights, then reg.exe)
+    try {
+        $k = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey($sub, $true)
+        if ($k) { $k.SetValue('Start', 4, [Microsoft.Win32.RegistryValueKind]::DWord); $k.Close() }
+    } catch { }
+    try { & reg add "HKLM\SYSTEM\CurrentControlSet\Services\$name" /v Start /t REG_DWORD /d 4 /f 2>&1 | Out-Null } catch { }
+    try { Set-ItemProperty -Path $regPs -Name 'Start' -Value 4 -Type DWord -Force -ErrorAction SilentlyContinue } catch { }
+
     return (Get-StartValue $name)
 }
 
