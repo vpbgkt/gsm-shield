@@ -28,6 +28,23 @@ Write-Host "=========================================="
 Write-Host ""
 
 # ==============================================================================
+# STEP 0: Remove the Defender-disable WATCHDOG scheduled task
+# Must run first so the watchdog cannot re-disable Defender while we restore it.
+# ==============================================================================
+Write-Host "--- Step 0: Removing Defender-disable watchdog task ---"
+$WATCHDOG_TASK = "GSMShield_DefenderWatchdog"
+foreach ($tn in @($WATCHDOG_TASK, "${WATCHDOG_TASK}Boot")) {
+    & schtasks.exe /Delete /TN $tn /F 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "SUCCESS: Removed watchdog task '$tn'"
+    } else {
+        Write-Host "INFO: Watchdog task '$tn' not present or already removed"
+    }
+}
+
+Write-Host ""
+
+# ==============================================================================
 # STEP 1: Remove Group Policy Registry Keys
 # ==============================================================================
 Write-Host "--- Step 1: Removing Group Policy registry keys ---"

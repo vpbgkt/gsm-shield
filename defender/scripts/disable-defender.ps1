@@ -583,6 +583,71 @@ try {
 Write-Host ""
 
 # ==============================================================================
+# STEP 8: Install the auto-re-enable WATCHDOG (scheduled task, runs as SYSTEM)
+# Windows Update / Defender platform updates can silently reset the WinDefend
+# service back to Automatic. This registers a recurring SYSTEM scheduled task
+# that runs enforce-defender-disabled.ps1 at startup and every 30 minutes to
+# re-apply Start=4 if drift is detected. Removed by restore-defender.ps1.
+# ==============================================================================
+Write-Host "--- Step 8: Installing Defender-disable watchdog task ---"
+
+$WATCHDOG_TASK = "GSMShield_DefenderWatchdog"
+try {
+    # The enforce script sits next to THIS script (resources\scripts\).
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $enforcePath = Join-Path $scriptDir "enforce-defender-disabled.ps1"
+
+    if (-not (Test-Path $enforcePath)) {
+        Write-Host "INFO: enforce-defender-disabled.ps1 not found next to this script - watchdog skipped"
+    } else {
+        # Use schtasks.exe rather than the New-ScheduledTask* cmdlets: it is more
+        # reliable across Windows versions and avoids the RepetitionDuration edge
+        # cases (TimeSpan::MaxValue is rejected by Register-ScheduledTask).
+        #
+        # schtasks does not allow /RI (repeat interval) together with /SC ONSTART,
+        # so we register TWO tasks that both run enforce-defender-disabled.ps1 as
+        # NT AUTHORITY\SYSTEM with highest privileges:
+        #   - GSMShield_DefenderWatchdog       /SC MINUTE /MO 30  (every 30 minutes)
+        #   - GSMShield_DefenderWatchdogBoot   /SC ONSTART        (immediately each boot)
+        $psExe = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+        $tr = '\"' + $psExe + '\" -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File \"' + $enforcePath + '\"'
+
+        $okAny = $false
+
+        # Periodic task (every 30 minutes)
+        $out1 = & schtasks.exe /Create /TN $WATCHDOG_TASK /TR $tr /SC MINUTE /MO 30 /RU "SYSTEM" /RL HIGHEST /F 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "SUCCESS: Registered watchdog task '$WATCHDOG_TASK' (every 30 min, as SYSTEM)"
+            $okAny = $true
+        } else {
+            Write-Host "FAILED: schtasks periodic task (exit $LASTEXITCODE): $out1"
+        }
+
+        # Startup task (runs at each boot)
+        $out2 = & schtasks.exe /Create /TN "${WATCHDOG_TASK}Boot" /TR $tr /SC ONSTART /RU "SYSTEM" /RL HIGHEST /F 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "SUCCESS: Registered watchdog task '${WATCHDOG_TASK}Boot' (at startup, as SYSTEM)"
+            $okAny = $true
+        } else {
+            Write-Host "FAILED: schtasks startup task (exit $LASTEXITCODE): $out2"
+        }
+
+        if ($okAny) {
+            $successCount++
+            # Kick the periodic task once now so any drift is corrected immediately.
+            & schtasks.exe /Run /TN $WATCHDOG_TASK 2>&1 | Out-Null
+        } else {
+            $failCount++
+        }
+    }
+} catch {
+    Write-Host "FAILED: Register watchdog task: $($_.Exception.Message)"
+    $failCount++
+}
+
+Write-Host ""
+
+# ==============================================================================
 # SUMMARY
 # ==============================================================================
 Write-Host "=========================================="
