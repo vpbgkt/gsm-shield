@@ -42,7 +42,7 @@ $TAMPER_BLOCKED_EXIT = 2
 # Denied because the key is owned by TrustedInstaller, so we elevate to SYSTEM.
 $winDefendDisableVerified = $false
 
-# ── Helper: run a command in the NT AUTHORITY\SYSTEM context ──────────────────
+# -- Helper: run a command in the NT AUTHORITY\SYSTEM context ------------------
 # The Defender service keys under HKLM\SYSTEM\CurrentControlSet\Services are owned
 # by TrustedInstaller; a normal Administrator cannot change `Start` (Access Denied).
 # We register a one-shot scheduled task that runs as NT AUTHORITY\SYSTEM, execute
@@ -104,7 +104,7 @@ function Invoke-AsSystem {
     }
 }
 
-# ── Helper: disable a Defender service key via SYSTEM/TrustedInstaller ────────
+# -- Helper: disable a Defender service key via SYSTEM/TrustedInstaller --------
 # Takes ownership of the service key, grants SYSTEM full control, sets Start=4,
 # then (for the critical WinDefend service) verifies the value read-back equals 4.
 function Set-DefenderServiceDisabled {
@@ -153,7 +153,7 @@ Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName' -N
     # Since the app already runs elevated (requireAdministrator manifest), this
     # may succeed on systems where the Task Scheduler is unavailable or busy.
     if ($startValue -ne 4) {
-        Write-Host "INFO: Scheduled task approach did not verify Start=4 for $ServiceName — trying direct fallback"
+        Write-Host "INFO: Scheduled task approach did not verify Start=4 for $ServiceName - trying direct fallback"
 
         $regNativePath = "HKLM\SYSTEM\CurrentControlSet\Services\$ServiceName"
         try {
@@ -224,11 +224,11 @@ Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName' -N
 }
 
 Write-Host "=========================================="
-Write-Host "  GSM Shield AV — Disable Windows Defender"
+Write-Host "  GSM Shield AV - Disable Windows Defender"
 Write-Host "=========================================="
 Write-Host ""
 
-# ── Check for Administrator privileges ───────────────────────────────────────
+# -- Check for Administrator privileges ---------------------------------------
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
@@ -239,7 +239,7 @@ if (-not $isAdmin) {
 
 Write-Host "INFO: Running with Administrator privileges"
 
-# ── Check Tamper Protection status (GATE) ────────────────────────────────────
+# -- Check Tamper Protection status (GATE) ------------------------------------
 # Tamper Protection silently reverts every Defender change while it is ON. Rather
 # than warn and continue, block here: print the exact settings path and exit with
 # a distinct tamper-blocked code so the caller can prompt the user and retry.
@@ -252,7 +252,7 @@ try {
         Write-Host "TAMPER-BLOCKED:   Settings > Windows Security > Virus & threat protection > Virus & threat protection settings > Tamper Protection > Off"
         exit $TAMPER_BLOCKED_EXIT
     } else {
-        Write-Host "INFO: Tamper Protection is disabled — all changes should apply"
+        Write-Host "INFO: Tamper Protection is disabled - all changes should apply"
     }
 } catch {
     Write-Host "INFO: Could not check Tamper Protection status: $($_.Exception.Message)"
@@ -261,14 +261,14 @@ try {
 
 Write-Host ""
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # STEP 1: Group Policy Registry Keys
 # These are the most reliable method when Tamper Protection is off.
 # They persist across reboots and are respected by Defender.
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 Write-Host "--- Step 1: Setting Group Policy registry keys ---"
 
-# 1a. DisableRealtimeMonitoring — Disable real-time protection via policy
+# 1a. DisableRealtimeMonitoring - Disable real-time protection via policy
 try {
     $realtimePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
     if (-not (Test-Path $realtimePath)) {
@@ -282,7 +282,7 @@ try {
     $failCount++
 }
 
-# 1b. DisableBehaviorMonitoring — Disable behavior monitoring via policy
+# 1b. DisableBehaviorMonitoring - Disable behavior monitoring via policy
 try {
     $realtimePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
     Set-ItemProperty -Path $realtimePath -Name "DisableBehaviorMonitoring" -Value 1 -Type DWord -Force
@@ -293,7 +293,7 @@ try {
     $failCount++
 }
 
-# 1c. DisableOnAccessProtection — Disable on-access file scanning via policy
+# 1c. DisableOnAccessProtection - Disable on-access file scanning via policy
 try {
     Set-ItemProperty -Path $realtimePath -Name "DisableOnAccessProtection" -Value 1 -Type DWord -Force
     Write-Host "SUCCESS: Set Policy DisableOnAccessProtection = 1"
@@ -303,7 +303,7 @@ try {
     $failCount++
 }
 
-# 1d. DisableIOAVProtection — Disable scanning of downloaded files via policy
+# 1d. DisableIOAVProtection - Disable scanning of downloaded files via policy
 try {
     Set-ItemProperty -Path $realtimePath -Name "DisableIOAVProtection" -Value 1 -Type DWord -Force
     Write-Host "SUCCESS: Set Policy DisableIOAVProtection = 1"
@@ -330,11 +330,11 @@ try {
 
 Write-Host ""
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # STEP 2: MpPreference Cmdlets
-# Direct Defender preference changes — immediate effect but may be reverted
+# Direct Defender preference changes - immediate effect but may be reverted
 # by Tamper Protection if it's enabled.
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 Write-Host "--- Step 2: Setting MpPreference values ---"
 
 # 2a. Disable real-time monitoring
@@ -399,7 +399,7 @@ try {
 
 Write-Host ""
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # STEP 3: Disable Defender Services (SYSTEM/TrustedInstaller elevation)
 # Change startup type to Disabled (Start=4) so Defender doesn't restart after
 # reboot. The service keys are owned by TrustedInstaller, so a plain-Administrator
@@ -407,7 +407,7 @@ Write-Host ""
 # Each key is disabled from the NT AUTHORITY\SYSTEM context (one-shot scheduled
 # task) which takes ownership, grants write access, and sets Start=4. The critical
 # WinDefend value is then verified via read-back before we report success.
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 Write-Host "--- Step 3: Disabling Defender services (elevated to SYSTEM) ---"
 
 $defenderServices = @(
@@ -419,7 +419,7 @@ $defenderServices = @(
 )
 
 foreach ($svc in $defenderServices) {
-    # Stop the service (best effort — it may be protected while running)
+    # Stop the service (best effort - it may be protected while running)
     try {
         $service = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
         if ($service -and $service.Status -eq 'Running') {
@@ -434,7 +434,7 @@ foreach ($svc in $defenderServices) {
     try {
         $startValue = Set-DefenderServiceDisabled -ServiceName $svc.Name
         if ($null -eq $startValue) {
-            # Key not present (service not installed) — nothing to disable.
+            # Key not present (service not installed) - nothing to disable.
             continue
         }
 
@@ -456,10 +456,10 @@ foreach ($svc in $defenderServices) {
 
 Write-Host ""
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # STEP 4: Disable Defender Scheduled Tasks
 # Prevent Defender from re-enabling itself via scheduled maintenance tasks.
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 Write-Host "--- Step 4: Disabling Defender scheduled tasks ---"
 
 $defenderTasks = @(
@@ -487,10 +487,10 @@ foreach ($taskName in $defenderTasks) {
 
 Write-Host ""
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # STEP 5: Disable Windows Security Center notifications for Defender
 # Suppress the "No antivirus provider found" warnings in the tray
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 Write-Host "--- Step 5: Suppressing Defender notifications ---"
 
 try {
@@ -519,10 +519,10 @@ try {
 
 Write-Host ""
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # STEP 6: Disable Defender tray icon
 # Remove the Defender shield icon from the system tray
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 Write-Host "--- Step 6: Disabling Defender system tray icon ---"
 
 try {
@@ -540,9 +540,9 @@ try {
 
 Write-Host ""
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # SUMMARY
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 Write-Host "=========================================="
 Write-Host "  RESULTS"
 Write-Host "=========================================="
@@ -554,7 +554,7 @@ Write-Host ""
 # Exit semantics (Requirements 2.1, 2.2, 2.6):
 #   - Tamper-blocked (code 2) is handled and returned earlier, before any step.
 #   - Success (0) is returned ONLY when the CRITICAL WinDefend service was
-#     verifiably disabled (Start=4 read-back) — this is what makes the disable
+#     verifiably disabled (Start=4 read-back) - this is what makes the disable
 #     survive auto-re-enable across reboots. The MpPreference/policy changes alone
 #     leave Defender able to re-activate, so they do NOT qualify as success.
 #   - Otherwise return non-zero: the critical service disable could not be verified.
@@ -567,7 +567,7 @@ if ($winDefendDisableVerified) {
     $exitCode = 0
 } else {
     Write-Host "ERROR: Critical WinDefend service disable could not be verified (Start != 4)"
-    Write-Host "ERROR: Defender may re-enable itself on reboot — the disable did not take effect"
+    Write-Host "ERROR: Defender may re-enable itself on reboot - the disable did not take effect"
     Write-Host "ERROR: Ensure Tamper Protection is off and re-run this script"
     $exitCode = 1
 }

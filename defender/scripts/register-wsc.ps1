@@ -14,7 +14,7 @@
 $ErrorActionPreference = "Stop"
 $exitCode = 0
 
-# ── Fixed, deterministic GUID for GSM Shield AV ─────────────────────────────
+# -- Fixed, deterministic GUID for GSM Shield AV -----------------------------
 # Using a constant GUID ensures idempotent registration: re-running this script
 # updates the existing entry instead of creating duplicates.
 $PRODUCT_GUID = "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
@@ -54,7 +54,7 @@ if (-not (Test-Path $exePath)) {
     exit 1
 }
 
-# ── Add Defender exclusion for the GSM Shield AV install folder ──────────────
+# -- Add Defender exclusion for the GSM Shield AV install folder --------------
 # Best-effort: if Defender is still partially active it won't flag our files.
 # This also helps during the transition period before Defender is fully disabled.
 $installDir = Split-Path -Parent $exePath
@@ -100,7 +100,7 @@ try {
             $securityCenterKey.Close()
         }
         
-        # ── Idempotent cleanup: remove any stale GSM Shield AV entries ───────
+        # -- Idempotent cleanup: remove any stale GSM Shield AV entries -------
         # This prevents duplicate entries if the script is re-run or if the
         # user triggers setup from Settings after a previous partial run.
         Write-Host "INFO: Checking for existing GSM Shield AV registrations..."
@@ -114,7 +114,7 @@ try {
                         $existingKey.Close()
                         if ($existingDisplayName -eq $PRODUCT_DISPLAY_NAME) {
                             if ($subKeyName -ne $PRODUCT_KEY_NAME) {
-                                # Stale entry with a different GUID — remove it
+                                # Stale entry with a different GUID - remove it
                                 Write-Host "INFO: Removing stale registration: $subKeyName"
                                 $providerKey.DeleteSubKeyTree($subKeyName, $false)
                             }
