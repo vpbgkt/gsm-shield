@@ -1,0 +1,73 @@
+appId: com.gsmshield.av
+productName: GSM Shield AV
+copyright: Copyright © 2024 GSM Shield AV
+
+# Output directory for built artifacts
+directories:
+  output: dist
+  buildResources: .
+
+# Files to include in the packaged app
+files:
+  - electron/**/*
+  - engine/**/*
+  - monitor/**/*
+  - whitelist/**/*
+  - license/**/*
+  - defender/**/*
+  - database/**/*
+  - assets/**/*
+  - renderer/dist/**/*
+  - package.json
+  - "!renderer/src/**/*"
+  - "!renderer/node_modules/**/*"
+  - "!**/*.test.js"
+  - "!**/__tests__/**/*"
+
+# Unpack ClamAV binaries and PowerShell scripts from the ASAR archive
+# so they can be executed directly as native processes.
+# Also unpack better-sqlite3 native module (.node file cannot be loaded from inside ASAR)
+asarUnpack:
+  - "assets/clamav/**/*"
+  - "defender/scripts/**/*"
+  - "node_modules/better-sqlite3/**/*"
+  - "node_modules/bindings/**/*"
+  - "node_modules/file-uri-to-path/**/*"
+
+# Windows build target
+win:
+  icon: null
+  signingHashAlgorithms: null
+  forceCodeSigning: false
+  sign: null
+  signAndEditExecutable: false
+  target:
+    - target: dir
+      arch:
+        - x64
+  requestedExecutionLevel: requireAdministrator
+  artifactName: "${productName}-Setup-${version}.${ext}"
+
+# Bundle ClamAV binaries from assets/clamav/ into resources/clamav/ inside the packaged app.
+# Files are unpacked from the ASAR (see asarUnpack above) so clamscan.exe and freshclam.exe
+# can be executed directly as native processes.
+extraResources:
+  - from: assets/clamav/
+    to: clamav
+    filter:
+      - "**/*"
+
+# Copy PowerShell scripts to the unpacked app root under resources/scripts/
+# so ps-runner.js can locate them at runtime via process.resourcesPath.
+extraFiles:
+  - from: defender/scripts/
+    to: resources/scripts
+    filter:
+      - "**/*.ps1"
+
+# NSIS installer stub (used if target is switched to nsis later)
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  runAfterFinish: false
