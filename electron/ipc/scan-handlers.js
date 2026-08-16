@@ -54,6 +54,23 @@ function getFullScanPath() {
   return process.env.SystemDrive || 'C:';
 }
 
+/**
+ * Directories to exclude from a Full Scan: Windows system files (huge,
+ * low threat value, frequently locked by the OS), our own quarantine
+ * folder (must never re-scan already-quarantined files), and node_modules
+ * caches. Without this, --recursive over C:\ can run for a very long time
+ * with no meaningful additional detection coverage.
+ * @returns {string[]} directory name fragments passed to --exclude-dir
+ */
+function getFullScanExcludeDirs() {
+  return [
+    'Windows',
+    '\\$Recycle\\.Bin',
+    'ProgramData\\\\Microsoft\\\\Windows Defender',
+    'GSMShieldAV\\\\quarantine',
+  ];
+}
+
 // ---- Register ------------------------------------------------------------
 
 /**
@@ -72,11 +89,16 @@ function register(ipcMain, { getMainWindow, getDb }) {
       return { scanId: activeScan.id, error: 'A scan is already running' };
     }
 
-    const scanId = generateScanId();
     const win = getMainWindow();
     const scanner = require('../../engine/scanner');
 
-    // Determine target path based on mode
+    // Determine target path based on mode.
+    // NOTE: the folder/file picker dialog is awaited BEFORE we generate a
+    // scanId or mark a scan as active. The renderer's scanStore sets UI
+    // status to 'running' as soon as this handler's promise resolves with a
+    // scanId, so resolving early (while the OS picker is still open) makes
+    // the UI show "Scanning..." before the user has even chosen a target.
+    // Resolving only after the dialog closes keeps 'running' truthful.
     let scanTarget;
     switch (mode) {
       case 'quick':
@@ -111,6 +133,9 @@ function register(ipcMain, { getMainWindow, getDb }) {
         scanTarget = getFullScanPath();
     }
 
+    const scanId = generateScanId();
+    console.log(`[scan:${scanId}] START mode=${mode} target=${scanTarget || '(quick: multiple)'}`);
+
     // Create scan history record in DB
     const startedAt = new Date().toISOString();
     let dbRecordId = null;
@@ -141,14 +166,42 @@ function register(ipcMain, { getMainWindow, getDb }) {
       let totalFilesScanned = 0;
       let totalThreatsFound = 0;
 
+      // Pre-flight: verify the ClamAV engine + virus definitions are present
+      // before spawning anything. Surfaces a clear, actionable error instead
+      // of a generic non-zero exit code from clamscan.exe.
+      const defCheck = scanner.checkDefinitions();
+      if (!defCheck.ok) {
+        console.error(`[scan:${scanId}] ABORT - definitions check failed: ${defCheck.detail}`);
+        const endedAt = new Date().toISOString();
+        try {
+          const db = getDb();
+          if (dbRecordId) {
+            db.prepare(
+              'UPDATE scan_history SET ended_at = ?, status = ? WHERE id = ?'
+            ).run(endedAt, 'error', dbRecordId);
+          }
+        } catch (_) {}
+        push('scan:complete', {
+          scanId,
+          result: { filesScanned: 0, threatsFound: 0, cancelled: false, error: true, errorMessage: defCheck.detail },
+        });
+        activeScan = null;
+        return;
+      }
+
       try {
         const targets = mode === 'quick' ? getQuickScanPaths() : [scanTarget];
+        console.log(`[scan:${scanId}] Scanning ${targets.length} target(s): ${targets.join(', ')}`);
 
         for (const target of targets) {
-          if (controller.signal.aborted) break;
+          if (controller.signal.aborted) {
+            console.log(`[scan:${scanId}] Cancelled before scanning: ${target}`);
+            break;
+          }
 
           const result = await scanner.scan(target, {
             signal: controller.signal,
+            excludeDirs: mode === 'full' ? getFullScanExcludeDirs() : undefined,
             onProgress({ filesScanned }) {
               totalFilesScanned = filesScanned;
               push('scan:progress', {
@@ -159,13 +212,31 @@ function register(ipcMain, { getMainWindow, getDb }) {
             },
             onThreat({ filePath, threatName }) {
               totalThreatsFound++;
+              console.log(`[scan:${scanId}] THREAT detected: ${threatName} at ${filePath}`);
               push('scan:threat', { scanId, filePath, threatName });
 
-              // Auto-quarantine (best effort)
+              // Auto-quarantine. Failures are logged and surfaced to the
+              // renderer (not silently swallowed) so the user is not told
+              // a threat was handled when the file may still be on disk.
               try {
                 const quarantine = require('../../engine/quarantine');
-                quarantine.quarantineFile(filePath, threatName).catch(() => {});
-              } catch (_) {}
+                quarantine.quarantineFile(filePath, threatName)
+                  .then(() => {
+                    console.log(`[scan:${scanId}] Quarantined: ${filePath}`);
+                  })
+                  .catch((qErr) => {
+                    console.error(`[scan:${scanId}] Quarantine FAILED for ${filePath}: ${qErr.message}`);
+                    push('scan:threat', {
+                      scanId,
+                      filePath,
+                      threatName,
+                      quarantineFailed: true,
+                      quarantineError: qErr.message,
+                    });
+                  });
+              } catch (qErr) {
+                console.error(`[scan:${scanId}] Quarantine call threw for ${filePath}: ${qErr.message}`);
+              }
             },
           });
 
@@ -175,8 +246,10 @@ function register(ipcMain, { getMainWindow, getDb }) {
           }
         }
       } catch (err) {
-        console.error('[scan-handlers] Scan error:', err.message);
+        console.error(`[scan:${scanId}] Scan error:`, err.message);
       }
+
+      console.log(`[scan:${scanId}] DONE filesScanned=${totalFilesScanned} threatsFound=${totalThreatsFound} cancelled=${controller.signal.aborted}`);
 
       // Update DB record
       const endedAt = new Date().toISOString();

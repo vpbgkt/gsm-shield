@@ -64,7 +64,7 @@ function checkDefinitions() {
  * @param {AbortSignal} options.signal - AbortSignal for cancellation
  * @returns {Promise<ScanResult>}
  */
-async function scan(targetPath, { onProgress, onThreat, signal } = {}) {
+async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = {}) {
   const clamscanPath = resolveClamscanPath();
   const startTime = Date.now();
   
@@ -75,15 +75,30 @@ async function scan(targetPath, { onProgress, onThreat, signal } = {}) {
 
   return new Promise((resolve, reject) => {
     // Spawn clamscan.exe with required arguments
-    // --recursive: scan subdirectories
-    // --stdout: send all output to stdout (allows progress tracking)
-    const args = ['--recursive', '--stdout'];
-    
+    // --recursive:   scan subdirectories
+    // --stdout:      send all output to stdout (allows progress tracking)
+    // --no-summary:  suppress the "SCAN SUMMARY" footer (Known viruses: N,
+    //                Engine version: X, Scanned files: N, Time: N sec, ...).
+    //                CRITICAL: without this flag, every summary line matches
+    //                the "key: value" file-line pattern below and gets
+    //                miscounted as a scanned file (verified: 1 real file +
+    //                10 summary lines = 11 reported "files scanned").
+    const args = ['--recursive', '--stdout', '--no-summary'];
+
     // Add database path explicitly to ensure correct definitions are used
     const resourcesPath = process.resourcesPath || path.join(__dirname, '..', 'assets');
     const dbDir = path.join(resourcesPath, 'clamav');
     args.push('--database=' + dbDir);
-    
+
+    // Optional directory exclusions (e.g. for a Full Scan over a drive root,
+    // to skip Windows system dirs / our own quarantine dir). Each entry is a
+    // regex fragment matched against the full path by clamscan.
+    if (Array.isArray(excludeDirs)) {
+      for (const dir of excludeDirs) {
+        args.push('--exclude-dir=' + dir);
+      }
+    }
+
     args.push(targetPath);
 
     childProcess = spawn(clamscanPath, args, {
@@ -130,31 +145,39 @@ async function scan(targetPath, { onProgress, onThreat, signal } = {}) {
       }
     }
 
-    // Parse stdout line by line for threat detections and progress
-    // ClamAV outputs each file in the format:
-    //   <filepath>: OK              (clean)
-    //   <filepath>: <threat> FOUND  (infected)
+    // Parse stdout line by line for threat detections and progress.
+    // With --no-summary, ClamAV emits exactly one verdict line per scanned
+    // file, always ending in " OK" (clean) or " FOUND" (infected) — no other
+    // line shape is emitted in this mode. Anchoring on these two exact
+    // verdict suffixes (instead of a generic "key: value" pattern) prevents
+    // any future non-file diagnostic/warning line from being miscounted as
+    // a scanned file, which is the root cause of the file-count bug fixed
+    // above (belt-and-suspenders against a regression of the same class).
     const THREAT_PATTERN = /^(.+): (.+) FOUND$/;
-    const FILE_PATTERN = /^(.+): .+$/;
+    const CLEAN_PATTERN = /^(.+): OK$/;
 
     stdout.on('line', (line) => {
-      // Skip warning lines and empty lines
-      if (!line || line.startsWith('LibClamAV') || line.startsWith('-------')) return;
-      
-      if (FILE_PATTERN.test(line)) {
-        filesScanned++;
-        emitProgress();
-      }
+      if (!line) return;
 
-      const match = line.match(THREAT_PATTERN);
-      if (match) {
-        const [, filePath, threatName] = match;
+      const threatMatch = line.match(THREAT_PATTERN);
+      if (threatMatch) {
+        filesScanned++;
         threatsFound++;
-        
+        emitProgress();
+
+        const [, filePath, threatName] = threatMatch;
         if (onThreat) {
           onThreat({ filePath: filePath.trim(), threatName: threatName.trim() });
         }
+        return;
       }
+
+      if (CLEAN_PATTERN.test(line)) {
+        filesScanned++;
+        emitProgress();
+      }
+      // Any other line (LibClamAV warnings, blank separators, etc.) is
+      // intentionally ignored for counting purposes.
     });
 
     // Log stderr output for debugging

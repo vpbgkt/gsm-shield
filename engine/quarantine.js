@@ -87,8 +87,21 @@ async function quarantineFile(filePath, threatName) {
   const quarantineName = `${uuid}_${basename}`;
   const quarantinePath = path.join(QUARANTINE_DIR, quarantineName);
 
-  // 4. Move file to quarantine directory (atomic rename)
-  fs.renameSync(filePath, quarantinePath);
+  // 4. Move file to quarantine directory.
+  // fs.renameSync throws EXDEV when the source and destination are on
+  // different volumes/drive letters (e.g. infected file on D:\, quarantine
+  // dir on C:\AppData) — rename cannot cross a filesystem boundary. Fall
+  // back to copy-then-delete in that case so quarantine still succeeds.
+  try {
+    fs.renameSync(filePath, quarantinePath);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      fs.copyFileSync(filePath, quarantinePath);
+      fs.unlinkSync(filePath);
+    } else {
+      throw err;
+    }
+  }
 
   // 5. Insert record into quarantine table
   const db = getDb();

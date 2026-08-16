@@ -127,9 +127,19 @@ describe('scanner module', () => {
 
       await scan(targetPath);
 
+      // --recursive: scan subdirectories; --stdout: emit per-file verdict
+      // lines for progress tracking; --no-summary: suppress the SCAN SUMMARY
+      // footer (fixes a bug where summary lines were miscounted as scanned
+      // files); --database=...: explicit path to the bundled definitions.
       expect(spawn).toHaveBeenCalledWith(
         expect.stringContaining('clamscan.exe'),
-        ['--no-summary', '--infected', targetPath],
+        [
+          '--recursive',
+          '--stdout',
+          '--no-summary',
+          expect.stringContaining('--database='),
+          targetPath,
+        ],
         { stdio: ['ignore', 'pipe', 'pipe'] }
       );
     });
@@ -239,6 +249,46 @@ describe('scanner module', () => {
       expect(result.errorMessage).toContain('Failed to start scanner');
       expect(result.filesScanned).toBe(0);
       expect(result.threatsFound).toBe(0);
+    });
+
+    // Regression test for the miscounting bug: a real clamscan.exe run
+    // against a single EICAR file was observed to report filesScanned=11
+    // (1 real file + 10 "SCAN SUMMARY" footer lines, each matching a
+    // generic "key: value" pattern). --no-summary was missing, and the
+    // parser matched any "text: text" line as a scanned file. This test
+    // simulates the exact summary footer ClamAV emits and asserts it is
+    // never counted.
+    test('should NOT count SCAN SUMMARY footer lines as scanned files (regression)', async () => {
+      const targetPath = 'C:\\test\\eicar-dir';
+      const onThreat = jest.fn();
+
+      setImmediate(() => {
+        mockStdout.push('C:\\test\\eicar-dir\\eicar.com: Eicar-Test-Signature FOUND\n');
+        mockStdout.push('\n');
+        mockStdout.push('----------- SCAN SUMMARY -----------\n');
+        mockStdout.push('Known viruses: 3627885\n');
+        mockStdout.push('Engine version: 1.5.2\n');
+        mockStdout.push('Scanned directories: 1\n');
+        mockStdout.push('Scanned files: 1\n');
+        mockStdout.push('Infected files: 1\n');
+        mockStdout.push('Data scanned: 68 B\n');
+        mockStdout.push('Data read: 68 B (ratio 1.00:1)\n');
+        mockStdout.push('Time: 13.762 sec (0 m 13 s)\n');
+        mockStdout.push('Start Date: 2026:08:16 23:03:44\n');
+        mockStdout.push('End Date:   2026:08:16 23:03:58\n');
+        mockStdout.push(null);
+        mockChildProcess.emit('exit', 1);
+      });
+
+      const result = await scan(targetPath, { onThreat });
+
+      // Exactly 1 file (the EICAR file), NOT 11 (1 file + 10 summary lines).
+      expect(result.filesScanned).toBe(1);
+      expect(result.threatsFound).toBe(1);
+      expect(onThreat).toHaveBeenCalledWith({
+        filePath: 'C:\\test\\eicar-dir\\eicar.com',
+        threatName: 'Eicar-Test-Signature',
+      });
     });
 
     test('should call onProgress callback', async () => {
