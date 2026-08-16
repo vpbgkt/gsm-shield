@@ -75,9 +75,18 @@ async function scan(targetPath, { onProgress, onThreat, signal } = {}) {
 
   return new Promise((resolve, reject) => {
     // Spawn clamscan.exe with required arguments
-    // --no-summary: Don't print summary at the end
-    // --infected: Only print infected files
-    childProcess = spawn(clamscanPath, ['--no-summary', '--infected', targetPath], {
+    // --recursive: scan subdirectories
+    // --stdout: send all output to stdout (allows progress tracking)
+    const args = ['--recursive', '--stdout'];
+    
+    // Add database path explicitly to ensure correct definitions are used
+    const resourcesPath = process.resourcesPath || path.join(__dirname, '..', 'assets');
+    const dbDir = path.join(resourcesPath, 'clamav');
+    args.push('--database=' + dbDir);
+    
+    args.push(targetPath);
+
+    childProcess = spawn(clamscanPath, args, {
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -121,13 +130,21 @@ async function scan(targetPath, { onProgress, onThreat, signal } = {}) {
       }
     }
 
-    // Parse stdout line by line for threat detections
-    // ClamAV outputs threats in the format: <filepath>: <threat name> FOUND
+    // Parse stdout line by line for threat detections and progress
+    // ClamAV outputs each file in the format:
+    //   <filepath>: OK              (clean)
+    //   <filepath>: <threat> FOUND  (infected)
     const THREAT_PATTERN = /^(.+): (.+) FOUND$/;
+    const FILE_PATTERN = /^(.+): .+$/;
 
     stdout.on('line', (line) => {
-      filesScanned++;
-      emitProgress();
+      // Skip warning lines and empty lines
+      if (!line || line.startsWith('LibClamAV') || line.startsWith('-------')) return;
+      
+      if (FILE_PATTERN.test(line)) {
+        filesScanned++;
+        emitProgress();
+      }
 
       const match = line.match(THREAT_PATTERN);
       if (match) {
@@ -135,7 +152,7 @@ async function scan(targetPath, { onProgress, onThreat, signal } = {}) {
         threatsFound++;
         
         if (onThreat) {
-          onThreat({ filePath, threatName });
+          onThreat({ filePath: filePath.trim(), threatName: threatName.trim() });
         }
       }
     });

@@ -259,6 +259,13 @@ app.on('ready', async () => {
       getLicense: () => getLicenseState(),
     });
 
+    // Register scan handlers
+    const scanHandlers = require('./ipc/scan-handlers');
+    scanHandlers.register(ipcMain, {
+      getMainWindow: () => mainWindow,
+      getDb,
+    });
+
     // Register settings handlers (task 2.3)
     const settingsHandlers = require('./ipc/settings-handlers');
     settingsHandlers.register(ipcMain, {
