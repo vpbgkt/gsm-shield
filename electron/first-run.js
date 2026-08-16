@@ -6,7 +6,7 @@
  * First-run setup orchestrator for GSM Shield AV.
  *
  * Responsibilities:
- *   1. Check the `first_run_complete` setting — if already done, return early.
+ *   1. Check the `first_run_complete` setting - if already done, return early.
  *   2. Run `defender/scripts/disable-defender.ps1` via ps-runner.
  *   3. Run `defender/scripts/register-wsc.ps1` via ps-runner.
  *   4. On each step failure: log the exact error output to error.log and
@@ -98,7 +98,7 @@ function appendErrorLog(message) {
     const line = `[${new Date().toISOString()}] [first-run] ${message}\n`;
     fs.appendFileSync(logPath, line, 'utf8');
   } catch (_) {
-    // Best-effort — silently swallow if the log cannot be written
+    // Best-effort - silently swallow if the log cannot be written
   }
 }
 
@@ -200,7 +200,7 @@ function isFirstRun() {
     const value = getSetting(db, 'first_run_complete');
     return value !== '1';
   } catch (err) {
-    // DB not initialised yet — treat as first run
+    // DB not initialised yet - treat as first run
     appendErrorLog(`isFirstRun() error: ${err.message}`);
     return true;
   }
@@ -235,7 +235,7 @@ async function runStep(scriptPath, stepName) {
         : (result.stderr || result.stdout || `exit code ${result.exitCode}`),
     };
   } catch (err) {
-    // Unexpected error (ps-runner itself threw) — log and continue
+    // Unexpected error (ps-runner itself threw) - log and continue
     appendErrorLog(`Step "${stepName}" threw unexpectedly: ${err.message}`);
     return {
       name: stepName,
@@ -249,7 +249,7 @@ async function runStep(scriptPath, stepName) {
 /**
  * Execute the full first-run setup sequence.
  *
- * Steps (all continued even on failure — Requirement 21.6):
+ * Steps (all continued even on failure - Requirement 21.6):
  *   1. disable-defender.ps1
  *   2. register-wsc.ps1
  *
@@ -266,7 +266,7 @@ async function runFirstRunSetup(mainWindow) {
   // disable as done, and surface a retryable "consent required" status.
   if (!hasDefenderConsent()) {
     appendErrorLog(
-      'First-run setup: Defender-disable consent not granted — skipping disable step.'
+      'First-run setup: Defender-disable consent not granted - skipping disable step.'
     );
 
     const payload = {
@@ -289,14 +289,44 @@ async function runFirstRunSetup(mainWindow) {
     return;
   }
 
+  // ── Quick check: was Defender already disabled by the installer? ───────────
+  // The Inno Setup [Run] section runs disable-defender.ps1 during install
+  // (elevated). If it succeeded, WinDefend Start will already be 4 and we can
+  // skip the disable step entirely (avoids needing admin elevation in the app).
+  let defenderAlreadyDisabled = false;
+  try {
+    const { execSync } = require('child_process');
+    const stdout = execSync(
+      'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ' +
+      '"(Get-ItemProperty HKLM:\\SYSTEM\\CurrentControlSet\\Services\\WinDefend -Name Start -ErrorAction SilentlyContinue).Start"',
+      { encoding: 'utf8', windowsHide: true, timeout: 10000 }
+    ).trim();
+    const startVal = parseInt(stdout, 10);
+    defenderAlreadyDisabled = (startVal === 4);
+    if (defenderAlreadyDisabled) {
+      appendErrorLog('First-run: Defender already disabled (WinDefend Start=4) - installer handled it.');
+    }
+  } catch (err) {
+    appendErrorLog('First-run: Could not check WinDefend Start value: ' + (err.message || err));
+  }
+
   const steps = [];
 
   // ── Step 1: Disable Windows Defender (Requirement 21.1) ───────────────────
-  steps.push(
-    await runStep(SCRIPT_DISABLE_DEFENDER, 'disable-defender')
-  );
+  if (defenderAlreadyDisabled) {
+    steps.push({
+      name: 'disable-defender',
+      success: true,
+      exitCode: 0,
+      detail: 'Already disabled by installer (WinDefend Start=4)',
+    });
+  } else {
+    steps.push(
+      await runStep(SCRIPT_DISABLE_DEFENDER, 'disable-defender')
+    );
+  }
 
-  // ── Step 2: Register GSM Shield AV with WSC (Requirements 21.2–21.4) ──────
+  // ── Step 2: Register GSM Shield AV with WSC (Requirements 21.2-21.4) ──────
   steps.push(
     await runStep(SCRIPT_REGISTER_WSC, 'register-wsc')
   );
@@ -312,7 +342,7 @@ async function runFirstRunSetup(mainWindow) {
 
   // ── Detect the tamper-blocked outcome from the disable step ───────────────
   // When disable-defender.ps1 exits with the tamper-blocked code, the disable
-  // did not fail generically — it is BLOCKED pending the user turning Tamper
+  // did not fail generically - it is BLOCKED pending the user turning Tamper
   // Protection off, and can be retried afterward (Requirement 2.4).
   const disableStep = steps.find((s) => s.name === 'disable-defender');
   const tamperBlocked =
@@ -363,7 +393,7 @@ async function runFirstRunSetup(mainWindow) {
  * Register the `defender:runSetup` IPC channel so the Settings page can
  * manually re-trigger the Defender-disable + WSC-registration sequence.
  *
- * Requirements: 21.1–21.4, 21.6
+ * Requirements: 21.1-21.4, 21.6
  *
  * @param {Electron.IpcMain} ipcMain
  * @param {Object} deps
