@@ -40,7 +40,7 @@ win:
   signingHashAlgorithms: null
   forceCodeSigning: false
   sign: null
-  signAndEditExecutable: false
+  signAndEditExecutable: true
   target:
     - target: dir
       arch:

@@ -36,6 +36,10 @@ AppUpdatesURL={#AppURL}
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=
 
+; ---- Architecture (64-bit install on x64) ----
+ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64
+
 ; ---- Directories ----
 DefaultDirName={autopf}\GSMShieldAV
 DefaultGroupName={#AppName}
@@ -150,16 +154,16 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\GSMShie
 ; ============================================================
 
 [Run]
-; Step 1 — Attempt to disable Defender real-time monitoring (best-effort)
-; Output is logged to %TEMP%\gsm-disable-defender.log for debugging
+; Step 1 - Attempt to disable Defender real-time monitoring (best-effort)
+; The script logs its own output to ProgramData\GSMShieldAV\defender-watchdog.log
+; and the first-run module logs to AppData\GSMShieldAV\error.log.
 Filename: "powershell.exe"; \
-    Parameters: "-ExecutionPolicy Bypass -NonInteractive -Command ""& '{app}\resources\scripts\disable-defender.ps1' 2>&1 | Tee-Object -FilePath (Join-Path $env:TEMP 'gsm-disable-defender.log')"""; \
+    Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\resources\scripts\disable-defender.ps1"""; \
     Flags: runhidden waituntilterminated; StatusMsg: "Configuring Windows Defender..."
 
-; Step 2 — Register GSM Shield AV with Windows Security Center
-; Output is logged to %TEMP%\gsm-register-wsc.log for debugging
+; Step 2 - Register GSM Shield AV with Windows Security Center (best-effort)
 Filename: "powershell.exe"; \
-    Parameters: "-ExecutionPolicy Bypass -NonInteractive -Command ""& '{app}\resources\scripts\register-wsc.ps1' 2>&1 | Tee-Object -FilePath (Join-Path $env:TEMP 'gsm-register-wsc.log')"""; \
+    Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\resources\scripts\register-wsc.ps1"""; \
     Flags: runhidden waituntilterminated; StatusMsg: "Registering GSM Shield AV with Windows Security Center..."
 
 ; ============================================================
