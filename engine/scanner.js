@@ -88,44 +88,61 @@ async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = 
   let childProcess = null;
 
   return new Promise((resolve, reject) => {
-    // Spawn clamscan.exe with required arguments
-    // --recursive:   scan subdirectories
-    // --stdout:      send all output to stdout (allows progress tracking)
-    // --no-summary:  suppress the "SCAN SUMMARY" footer (Known viruses: N,
-    //                Engine version: X, Scanned files: N, Time: N sec, ...).
-    //                CRITICAL: without this flag, every summary line matches
-    //                the "key: value" file-line pattern below and gets
-    //                miscounted as a scanned file (verified: 1 real file +
-    //                10 summary lines = 11 reported "files scanned").
-    const args = ['--recursive', '--stdout', '--no-summary'];
+    // Choose engine:
+    //   - If the clamd daemon is warm AND no directory exclusions are needed
+    //     (exclusions are only used for Full Scan), use clamdscan for a
+    //     near-instant scan (daemon already holds the DB in memory).
+    //   - Otherwise use cold clamscan.exe (loads the DB, ~14s), which also
+    //     supports --exclude-dir needed by Full Scan.
+    // Both emit the same "file: OK" / "file: sig FOUND" verdict lines, so the
+    // streaming parser below is identical for either engine.
+    let exe;
+    let args;
+    let engine;
 
-    // Add database path explicitly to ensure correct definitions are used
-    const resourcesPath = process.resourcesPath || path.join(__dirname, '..', 'assets');
-    const dbDir = path.join(resourcesPath, 'clamav');
-    args.push('--database=' + dbDir);
-
-    // Optional directory exclusions (e.g. for a Full Scan over a drive root,
-    // to skip Windows system dirs / our own quarantine dir). Each entry is a
-    // regex fragment matched against the full path by clamscan.
-    if (Array.isArray(excludeDirs)) {
-      for (const dir of excludeDirs) {
-        args.push('--exclude-dir=' + dir);
+    let daemon = null;
+    if (!Array.isArray(excludeDirs) || excludeDirs.length === 0) {
+      try {
+        const clamd = require('./clamd-manager');
+        daemon = clamd.getScanInvocation(); // null if daemon not ready
+      } catch (_) {
+        daemon = null;
       }
     }
 
-    // All targets as positional args -> single DB load for the whole batch.
-    for (const t of targets) {
-      args.push(t);
+    if (daemon) {
+      engine = 'clamd';
+      exe = daemon.exe;
+      args = daemon.baseArgs.slice();
+      for (const t of targets) args.push(t);
+    } else {
+      engine = 'clamscan';
+      exe = clamscanPath;
+      // --recursive:   scan subdirectories
+      // --stdout:      send all output to stdout (allows progress tracking)
+      // --no-summary:  suppress the "SCAN SUMMARY" footer, otherwise its lines
+      //                get miscounted as scanned files.
+      args = ['--recursive', '--stdout', '--no-summary'];
+      const resourcesPath = process.resourcesPath || path.join(__dirname, '..', 'assets');
+      const dbDir = path.join(resourcesPath, 'clamav');
+      args.push('--database=' + dbDir);
+      if (Array.isArray(excludeDirs)) {
+        for (const dir of excludeDirs) args.push('--exclude-dir=' + dir);
+      }
+      for (const t of targets) args.push(t);
     }
 
-    childProcess = spawn(clamscanPath, args, {
+    childProcess = spawn(exe, args, {
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
-    // Emit an immediate "loading" progress tick so the UI shows activity
-    // during the ~14s database load (before any file verdict is produced).
+    // With cold clamscan there is a ~14s DB-load window before any file
+    // verdict is produced, so start in the 'loading' phase to keep the UI
+    // alive. With the warm clamd daemon there is no load, so go straight to
+    // 'scanning'.
+    phase = engine === 'clamscan' ? 'loading' : 'scanning';
     if (onProgress) {
-      onProgress({ filesScanned: 0, threatsFound: 0, currentFile: '', phase: 'loading' });
+      onProgress({ filesScanned: 0, threatsFound: 0, currentFile: '', phase, engine });
     }
 
     const stdout = readline.createInterface({
@@ -146,7 +163,7 @@ async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = 
     function emitProgress(force) {
       const now = Date.now();
       if (onProgress && (force || now - lastProgressTime >= PROGRESS_THROTTLE_MS)) {
-        onProgress({ filesScanned, threatsFound, currentFile, phase });
+        onProgress({ filesScanned, threatsFound, currentFile, phase, engine });
         lastProgressTime = now;
       }
     }
@@ -237,7 +254,8 @@ async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = 
           filesScanned,
           threatsFound,
           duration,
-          cancelled: true
+          cancelled: true,
+          engine
         });
         return;
       }
@@ -248,7 +266,8 @@ async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = 
           filesScanned,
           threatsFound,
           duration,
-          cancelled: false
+          cancelled: false,
+          engine
         });
       } else {
         // Error case (exit code >= 2)

@@ -20,9 +20,58 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
+const fs = require('fs');
+
 /** Generate a unique scan ID. */
 function generateScanId() {
   return crypto.randomBytes(16).toString('hex');
+}
+
+/**
+ * Count files under the given targets (recursively), bounded by a file cap
+ * and a wall-clock cap so it can never run away. Used to produce an accurate
+ * "files scanned" figure for daemon-mode scans, because the clamd protocol
+ * only reports infected files (never the count of clean files scanned).
+ *
+ * @param {string[]} targets
+ * @param {AbortSignal} signal
+ * @param {(n:number, current:string)=>void} onTick
+ * @returns {Promise<number>}
+ */
+async function countFiles(targets, signal, onTick) {
+  const MAX_FILES = 1000000;
+  const DEADLINE = Date.now() + 20000; // 20s hard cap
+  let count = 0;
+  const stack = [...targets];
+
+  while (stack.length > 0) {
+    if (signal && signal.aborted) break;
+    if (count >= MAX_FILES || Date.now() > DEADLINE) break;
+    const p = stack.pop();
+    let st;
+    try {
+      st = fs.statSync(p);
+    } catch (_) {
+      continue; // inaccessible / vanished — skip, never abort the whole count
+    }
+    if (st.isDirectory()) {
+      let entries;
+      try {
+        entries = fs.readdirSync(p, { withFileTypes: true });
+      } catch (_) {
+        continue; // permission denied on a dir — skip it
+      }
+      for (const e of entries) {
+        // Skip reparse points / symlinks to avoid loops
+        if (e.isSymbolicLink && e.isSymbolicLink()) continue;
+        stack.push(require('path').join(p, e.name));
+      }
+    } else if (st.isFile()) {
+      count++;
+      if (onTick && count % 200 === 0) onTick(count, p);
+    }
+  }
+  return count;
 }
 
 // ---- State ---------------------------------------------------------------
@@ -243,6 +292,21 @@ function register(ipcMain, { getMainWindow, getDb }) {
 
         if (result) {
           totalFilesScanned = result.filesScanned || totalFilesScanned;
+
+          // Daemon (clamd) scans return in milliseconds but the clamd protocol
+          // does NOT report the count of clean files scanned — only infected
+          // ones. Compute an accurate figure with a bounded file walk so the
+          // UI can show a real "files scanned" number.
+          if (result.engine === 'clamd') {
+            console.log(`[scan:${scanId}] daemon scan done in ${result.duration}ms; counting files...`);
+            const counted = await countFiles(targets, controller.signal, (n, cur) => {
+              push('scan:progress', {
+                scanId, currentFile: cur, filesScanned: n,
+                threatsFound: totalThreatsFound, phase: 'scanning',
+              });
+            });
+            totalFilesScanned = counted;
+          }
         }
       } catch (err) {
         console.error(`[scan:${scanId}] Scan error:`, err.message);

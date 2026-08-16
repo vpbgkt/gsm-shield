@@ -307,6 +307,21 @@ app.on('ready', async () => {
     console.error('[main] tray-manager failed:', err);
   }
 
+  // 3b. Warm up the ClamAV daemon in the background so scans are near-instant.
+  // clamd loads the ~3.6M-signature database once (~14s) and stays resident;
+  // subsequent scans via clamdscan return in milliseconds. Starting it here
+  // (non-blocking) means it is typically ready by the time the user scans.
+  try {
+    const clamd = require('../engine/clamd-manager');
+    clamd.start().then((ok) => {
+      console.log('[main] clamd warm-up ' + (ok ? 'succeeded (scans will be fast)' : 'failed (falling back to clamscan)'));
+    }).catch((err) => {
+      console.error('[main] clamd warm-up error:', err.message);
+    });
+  } catch (err) {
+    console.error('[main] clamd-manager load failed:', err.message);
+  }
+
   // 4. Validate license and apply feature gates (implemented in task 8.4)
   await validateStoredLicense();
 
@@ -378,6 +393,10 @@ app.on('activate', () => {
 // swallow the exit (used by tray "Exit" menu item)
 app.on('before-quit', () => {
   app.isQuitting = true;
+  // Shut the ClamAV daemon down cleanly so it does not linger after exit.
+  try {
+    require('../engine/clamd-manager').stop();
+  } catch (_) { /* ignore */ }
 });
 
 // On Windows/Linux, all windows closing should quit the app only when the

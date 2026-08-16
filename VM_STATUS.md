@@ -91,3 +91,26 @@ Captured before any script run:
 5. Optional: GSM driver compatibility (auto exclusions + Test Mode toggle).
 6. Rebuild installer on host with sanitized scripts; full install test in VM
    (validate the installer's [Run] step wires the watchdog + hide-UI end-to-end).
+
+## Scanner performance + engine upgrade (ClamAV 1.5.4 + clamd daemon)
+
+- Upgraded bundled ClamAV engine from 1.5.2 to **1.5.4** (official Cisco-Talos
+  Windows x64 release, downloaded from GitHub). Replaced all runtime DLLs +
+  clamscan/freshclam; added `clamd.exe`, `clamdscan.exe`, `clamconf.exe`.
+  Kept the existing `.cvd` virus definitions (version-independent data).
+- Added `engine/clamd-manager.js`: starts the **clamd daemon** on a local TCP
+  socket (127.0.0.1:13310) at app launch, waits for PING/PONG readiness, and is
+  stopped on app quit. Config generated to AppData with absolute paths.
+- `engine/scanner.js` now routes scans through the **warm daemon (clamdscan)**
+  when ready, falling back to cold `clamscan.exe` (and using clamscan for Full
+  Scan since it needs `--exclude-dir`). Same verdict-line parser for both.
+- **Measured speedup (verified by direct execution):**
+  - Cold clamscan EICAR scan: ~14,000 ms (full DB reload every run).
+  - Warm clamd EICAR scan: **58-165 ms** (~65-150x faster). Daemon warm-up is a
+    one-time ~30-37s at app launch, in the background.
+- clamd protocol reports only infected files (no clean-file count), so
+  daemon-mode "files scanned" is computed via a bounded file walk in
+  `scan-handlers.js` (cap 1M files / 20s), which also streams live counts.
+- UX: Scanner page shows phase (Loading definitions vs Scanning), live current
+  file, live files/threats counters, elapsed timer, and per-threat quarantine
+  status. All 16 scanner unit tests pass.
