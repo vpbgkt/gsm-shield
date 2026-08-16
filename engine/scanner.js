@@ -56,20 +56,34 @@ function checkDefinitions() {
 }
 
 /**
- * Scan a file or directory using ClamAV
- * @param {string} targetPath - Path to scan
+ * Scan one or more files/directories using ClamAV.
+ *
+ * IMPORTANT (performance): ClamAV's clamscan.exe reloads the entire signature
+ * database (~3.6M signatures, ~14s) on EVERY process launch. To avoid paying
+ * that cost multiple times, pass ALL targets to a single scan() call — they
+ * are handed to one clamscan.exe invocation as multiple positional arguments,
+ * so the database is loaded exactly once for the whole batch.
+ *
+ * @param {string|string[]} targetPath - Path or array of paths to scan
  * @param {Object} options - Scan options
- * @param {Function} options.onProgress - Progress callback (throttled to 500ms)
+ * @param {Function} options.onProgress - Progress callback: receives
+ *        { filesScanned, threatsFound, currentFile, phase }. Throttled.
+ *        `phase` is 'loading' until the first file verdict arrives, then 'scanning'.
  * @param {Function} options.onThreat - Threat detection callback
  * @param {AbortSignal} options.signal - AbortSignal for cancellation
+ * @param {string[]} options.excludeDirs - Directory regex fragments to exclude
  * @returns {Promise<ScanResult>}
  */
 async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = {}) {
   const clamscanPath = resolveClamscanPath();
   const startTime = Date.now();
-  
+
+  const targets = Array.isArray(targetPath) ? targetPath : [targetPath];
+
   let filesScanned = 0;
   let threatsFound = 0;
+  let currentFile = '';
+  let phase = 'loading'; // 'loading' (DB load) -> 'scanning'
   let cancelled = false;
   let childProcess = null;
 
@@ -99,11 +113,20 @@ async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = 
       }
     }
 
-    args.push(targetPath);
+    // All targets as positional args -> single DB load for the whole batch.
+    for (const t of targets) {
+      args.push(t);
+    }
 
     childProcess = spawn(clamscanPath, args, {
       stdio: ['ignore', 'pipe', 'pipe']
     });
+
+    // Emit an immediate "loading" progress tick so the UI shows activity
+    // during the ~14s database load (before any file verdict is produced).
+    if (onProgress) {
+      onProgress({ filesScanned: 0, threatsFound: 0, currentFile: '', phase: 'loading' });
+    }
 
     const stdout = readline.createInterface({
       input: childProcess.stdout,
@@ -115,14 +138,15 @@ async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = 
       crlfDelay: Infinity
     });
 
-    // Throttle progress callbacks to max once per 500ms
+    // Throttle progress callbacks so the UI updates smoothly (~4/sec) without
+    // being flooded on fast directories. We always send the most-recent file.
     let lastProgressTime = 0;
-    const PROGRESS_THROTTLE_MS = 500;
+    const PROGRESS_THROTTLE_MS = 250;
 
-    function emitProgress() {
+    function emitProgress(force) {
       const now = Date.now();
-      if (onProgress && now - lastProgressTime >= PROGRESS_THROTTLE_MS) {
-        onProgress({ filesScanned, threatsFound });
+      if (onProgress && (force || now - lastProgressTime >= PROGRESS_THROTTLE_MS)) {
+        onProgress({ filesScanned, threatsFound, currentFile, phase });
         lastProgressTime = now;
       }
     }
@@ -161,19 +185,27 @@ async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = 
 
       const threatMatch = line.match(THREAT_PATTERN);
       if (threatMatch) {
+        // First verdict line means the DB finished loading -> scanning phase.
+        phase = 'scanning';
         filesScanned++;
         threatsFound++;
-        emitProgress();
 
         const [, filePath, threatName] = threatMatch;
+        currentFile = filePath.trim();
+        // Threats are important — always push immediately (force).
+        emitProgress(true);
+
         if (onThreat) {
-          onThreat({ filePath: filePath.trim(), threatName: threatName.trim() });
+          onThreat({ filePath: currentFile, threatName: threatName.trim() });
         }
         return;
       }
 
-      if (CLEAN_PATTERN.test(line)) {
+      const cleanMatch = line.match(CLEAN_PATTERN);
+      if (cleanMatch) {
+        phase = 'scanning';
         filesScanned++;
+        currentFile = cleanMatch[1].trim();
         emitProgress();
       }
       // Any other line (LibClamAV warnings, blank separators, etc.) is

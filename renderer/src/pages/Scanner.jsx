@@ -132,50 +132,80 @@ function ScanButton({ mode, label, description, Icon, color, border, bg, disable
   );
 }
 
-/** Animated progress bar (Requirement 15.2) */
-function ProgressBar({ progress, currentFile, onCancel }) {
+/** Format elapsed milliseconds as m:ss or s. */
+function formatElapsed(ms) {
+  if (!ms || ms < 0) return '0s';
+  const secs = Math.floor(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  return `${mins}m ${secs % 60}s`;
+}
+
+/** Live scan progress panel — shows phase, current file, counts, elapsed. */
+function ProgressBar({ phase, currentFile, filesScanned, threatsCount, elapsedMs, onCancel }) {
+  const isLoading = phase === 'loading';
+
   return (
     <div className="bg-slate-900/60 border border-slate-700/50 rounded-xl p-6 space-y-4">
       {/* Header row */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {/* Pulsing indicator */}
           <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500" />
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isLoading ? 'bg-amber-400' : 'bg-blue-400'} opacity-75`} />
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isLoading ? 'bg-amber-500' : 'bg-blue-500'}`} />
           </span>
-          <span className="text-sm font-medium text-slate-200">Scanning…</span>
+          <span className="text-sm font-medium text-slate-200">
+            {isLoading ? 'Loading virus definitions…' : 'Scanning…'}
+          </span>
         </div>
 
-        {/* Cancel button (Requirement 15.2) */}
-        <button
-          onClick={onCancel}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/40 text-red-400 text-xs font-medium hover:bg-red-500/10 hover:border-red-400/60 transition-colors"
-        >
-          <X className="w-3.5 h-3.5" />
-          Cancel
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-400 font-mono tabular-nums">{formatElapsed(elapsedMs)}</span>
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/40 text-red-400 text-xs font-medium hover:bg-red-500/10 hover:border-red-400/60 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+            Cancel
+          </button>
+        </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+      {/* Indeterminate progress bar */}
+      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden relative">
         <div
-          className="h-2 rounded-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-300 ease-out animate-pulse"
+          className={`h-2 rounded-full ${isLoading ? 'bg-gradient-to-r from-amber-600 to-amber-400' : 'bg-gradient-to-r from-blue-600 to-blue-400'} animate-pulse`}
           style={{ width: '100%' }}
         />
       </div>
 
-      {/* Files scanned count + current file */}
-      <div className="space-y-1">
-        <p className="text-xs text-slate-400">
-          Files scanned: <span className="text-slate-200 font-mono">{progress}</span>
+      {isLoading ? (
+        <p className="text-xs text-amber-300/80">
+          Preparing the scan engine (one-time, ~15s). This is normal.
         </p>
-        {currentFile && (
-          <p className="text-xs text-slate-500 font-mono truncate" title={currentFile}>
-            {currentFile}
-          </p>
-        )}
-      </div>
+      ) : (
+        <>
+          {/* Live counters */}
+          <div className="flex items-center gap-6">
+            <div>
+              <p className="text-lg font-semibold text-slate-100 tabular-nums">{filesScanned}</p>
+              <p className="text-[11px] uppercase tracking-wider text-slate-500">Files scanned</p>
+            </div>
+            <div>
+              <p className={`text-lg font-semibold tabular-nums ${threatsCount > 0 ? 'text-red-400' : 'text-green-400'}`}>{threatsCount}</p>
+              <p className="text-[11px] uppercase tracking-wider text-slate-500">Threats</p>
+            </div>
+          </div>
+
+          {/* Current file being scanned */}
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-0.5">Now scanning</p>
+            <p className="text-xs text-slate-300 font-mono truncate" title={currentFile}>
+              {currentFile || '…'}
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -230,12 +260,26 @@ function ThreatsPanel({ threats }) {
         {threats.map((threat, i) => (
           <li key={i} className="flex items-start gap-3 px-5 py-3">
             <AlertTriangle className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-mono text-slate-300 truncate" title={threat.filePath}>
                 {threat.filePath}
               </p>
               <p className="text-xs text-red-400 mt-0.5">{threat.threatName}</p>
             </div>
+            {/* Quarantine status badge */}
+            {threat.quarantined && (
+              <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/15 text-green-400 border border-green-500/25">
+                Quarantined
+              </span>
+            )}
+            {threat.quarantineFailed && (
+              <span
+                className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/25"
+                title={threat.quarantineError || 'Quarantine failed'}
+              >
+                Quarantine failed
+              </span>
+            )}
           </li>
         ))}
       </ul>
@@ -324,9 +368,13 @@ function HistoryPanel({ history }) {
  */
 export default function Scanner() {
   const status = useScanStore((s) => s.status);
+  const phase = useScanStore((s) => s.phase);
   const mode = useScanStore((s) => s.mode);
   const currentFile = useScanStore((s) => s.currentFile);
-  const progress = useScanStore((s) => s.progress);
+  const filesScanned = useScanStore((s) => s.filesScanned);
+  const startedAt = useScanStore((s) => s.startedAt);
+  const endedAt = useScanStore((s) => s.endedAt);
+  const errorMessage = useScanStore((s) => s.errorMessage);
   const threatsFound = useScanStore((s) => s.threatsFound);
   const history = useScanStore((s) => s.history);
   const startScan = useScanStore((s) => s.startScan);
@@ -340,6 +388,21 @@ export default function Scanner() {
 
   const isRunning = status === 'running';
   const isDone = status === 'complete' || status === 'cancelled';
+
+  // Live elapsed-time ticker while a scan is running.
+  const [now, setNow] = React.useState(Date.now());
+  useEffect(() => {
+    if (!isRunning) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
+  // Reload history when a scan finishes so the table reflects the new record.
+  useEffect(() => {
+    if (isDone) loadHistory();
+  }, [isDone, loadHistory]);
+
+  const elapsedMs = startedAt ? (endedAt || now) - startedAt : 0;
 
   return (
     <div className="min-h-full bg-slate-950 text-slate-100 px-6 py-6 space-y-6">
@@ -364,11 +427,14 @@ export default function Scanner() {
         ))}
       </div>
 
-      {/* ── Running state: progress bar + cancel (Requirement 15.2) ─────── */}
+      {/* ── Running state: live progress + cancel (Requirement 15.2) ─────── */}
       {isRunning && (
         <ProgressBar
-          progress={progress}
+          phase={phase}
           currentFile={currentFile}
+          filesScanned={filesScanned}
+          threatsCount={threatsFound.length}
+          elapsedMs={elapsedMs}
           onCancel={cancelScan}
         />
       )}
@@ -377,14 +443,21 @@ export default function Scanner() {
       {isDone && (
         <div className="space-y-3">
           {/* Status summary row */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <StatusBadge status={status} />
             {mode && (
               <span className="text-xs text-slate-400">
-                {capitalize(mode)} scan — {progress} file{progress !== 1 ? 's' : ''} scanned
+                {capitalize(mode)} scan — {filesScanned} file{filesScanned !== 1 ? 's' : ''} scanned in {formatElapsed(elapsedMs)}
               </span>
             )}
           </div>
+
+          {/* Error banner if the scan engine failed */}
+          {errorMessage && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-xs text-red-300">
+              {errorMessage}
+            </div>
+          )}
 
           {/* Threats found list (Requirement 15.3) */}
           <ThreatsPanel threats={threatsFound} />

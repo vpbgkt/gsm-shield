@@ -190,60 +190,59 @@ function register(ipcMain, { getMainWindow, getDb }) {
       }
 
       try {
+        // Pass ALL targets to a SINGLE scanner.scan() invocation. clamscan.exe
+        // loads its ~3.6M-signature database once per process (~14s), so
+        // batching the quick-scan directories into one process instead of one
+        // process per directory cuts that startup cost from Nx to 1x.
         const targets = mode === 'quick' ? getQuickScanPaths() : [scanTarget];
-        console.log(`[scan:${scanId}] Scanning ${targets.length} target(s): ${targets.join(', ')}`);
+        console.log(`[scan:${scanId}] Scanning ${targets.length} target(s) in one pass: ${targets.join(', ')}`);
 
-        for (const target of targets) {
-          if (controller.signal.aborted) {
-            console.log(`[scan:${scanId}] Cancelled before scanning: ${target}`);
-            break;
-          }
+        const result = await scanner.scan(targets, {
+          signal: controller.signal,
+          excludeDirs: mode === 'full' ? getFullScanExcludeDirs() : undefined,
+          onProgress({ filesScanned, threatsFound, currentFile, phase }) {
+            totalFilesScanned = filesScanned;
+            push('scan:progress', {
+              scanId,
+              currentFile: currentFile || '',
+              filesScanned,
+              threatsFound: threatsFound || 0,
+              phase: phase || 'scanning',
+            });
+          },
+          onThreat({ filePath, threatName }) {
+            totalThreatsFound++;
+            console.log(`[scan:${scanId}] THREAT detected: ${threatName} at ${filePath}`);
+            push('scan:threat', { scanId, filePath, threatName });
 
-          const result = await scanner.scan(target, {
-            signal: controller.signal,
-            excludeDirs: mode === 'full' ? getFullScanExcludeDirs() : undefined,
-            onProgress({ filesScanned }) {
-              totalFilesScanned = filesScanned;
-              push('scan:progress', {
-                scanId,
-                currentFile: target,
-                filesScanned: totalFilesScanned,
-              });
-            },
-            onThreat({ filePath, threatName }) {
-              totalThreatsFound++;
-              console.log(`[scan:${scanId}] THREAT detected: ${threatName} at ${filePath}`);
-              push('scan:threat', { scanId, filePath, threatName });
-
-              // Auto-quarantine. Failures are logged and surfaced to the
-              // renderer (not silently swallowed) so the user is not told
-              // a threat was handled when the file may still be on disk.
-              try {
-                const quarantine = require('../../engine/quarantine');
-                quarantine.quarantineFile(filePath, threatName)
-                  .then(() => {
-                    console.log(`[scan:${scanId}] Quarantined: ${filePath}`);
-                  })
-                  .catch((qErr) => {
-                    console.error(`[scan:${scanId}] Quarantine FAILED for ${filePath}: ${qErr.message}`);
-                    push('scan:threat', {
-                      scanId,
-                      filePath,
-                      threatName,
-                      quarantineFailed: true,
-                      quarantineError: qErr.message,
-                    });
+            // Auto-quarantine. Failures are logged and surfaced to the
+            // renderer (not silently swallowed) so the user is not told
+            // a threat was handled when the file may still be on disk.
+            try {
+              const quarantine = require('../../engine/quarantine');
+              quarantine.quarantineFile(filePath, threatName)
+                .then(() => {
+                  console.log(`[scan:${scanId}] Quarantined: ${filePath}`);
+                  push('scan:threat', { scanId, filePath, threatName, quarantined: true });
+                })
+                .catch((qErr) => {
+                  console.error(`[scan:${scanId}] Quarantine FAILED for ${filePath}: ${qErr.message}`);
+                  push('scan:threat', {
+                    scanId,
+                    filePath,
+                    threatName,
+                    quarantineFailed: true,
+                    quarantineError: qErr.message,
                   });
-              } catch (qErr) {
-                console.error(`[scan:${scanId}] Quarantine call threw for ${filePath}: ${qErr.message}`);
-              }
-            },
-          });
+                });
+            } catch (qErr) {
+              console.error(`[scan:${scanId}] Quarantine call threw for ${filePath}: ${qErr.message}`);
+            }
+          },
+        });
 
-          if (result) {
-            totalFilesScanned += result.filesScanned || 0;
-            totalThreatsFound += result.threatsFound || 0;
-          }
+        if (result) {
+          totalFilesScanned = result.filesScanned || totalFilesScanned;
         }
       } catch (err) {
         console.error(`[scan:${scanId}] Scan error:`, err.message);
