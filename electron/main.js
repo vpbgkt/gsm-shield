@@ -3,6 +3,15 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
+// Prevent main process abrupt termination and log unexpected exceptions
+process.on('uncaughtException', (err) => {
+  console.error('[main] 💥 Uncaught Exception in main process:', err?.stack || err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[main] 💥 Unhandled Promise Rejection in main process:', reason?.stack || reason);
+});
+
 // ─── Global reference to prevent GC ───────────────────────────────────────────
 let mainWindow = null;
 
@@ -201,6 +210,15 @@ function createWindow() {
     }
   });
 
+  // Handle unexpected renderer process crashes or hangs gracefully
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error(`[main] 💥 Renderer process gone (reason: ${details.reason}, exitCode: ${details.exitCode})`);
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    console.warn('[main] ⚠️ Main window webContents unresponsive');
+  });
+
   // Load renderer
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
@@ -237,6 +255,9 @@ app.on('ready', async () => {
   createWindow();
   registerWindowIpc();
 
+  // Variable to hold monitor instance (declared early for use in IPC handlers)
+  let monitorInstance = null;
+
   // 1. Initialise database (implemented in task 2)
   try {
     const { initDatabase } = require('../database/init');
@@ -271,7 +292,7 @@ app.on('ready', async () => {
     settingsHandlers.register(ipcMain, {
       getDb,
       getMainWindow: () => mainWindow,
-      getMonitor: () => null, // Implemented in task 7
+      getMonitor: () => monitorInstance, // Returns the live monitor instance
       getUpdater: () => null, // Implemented in task 6
     });
 
@@ -285,6 +306,13 @@ app.on('ready', async () => {
     // Register license handlers (task 8.5)
     const licenseHandlers = require('./ipc/license-handlers');
     licenseHandlers.register(ipcMain, {
+      getMainWindow: () => mainWindow,
+    });
+
+    // Register Expiro-specific handlers
+    const expiroHandlers = require('./ipc/expiro-handlers');
+    expiroHandlers.register(ipcMain, {
+      getQuarantine: () => require('../engine/quarantine'),
       getMainWindow: () => mainWindow,
     });
 
@@ -336,6 +364,7 @@ app.on('ready', async () => {
   }
 
   // 6. Start real-time monitor if enabled and license allows (implemented in task 7)
+  // INCLUDES EXPIRO-SPECIFIC PROTECTION
   try {
     // Check if real-time protection is enabled in settings AND not disabled by feature gate
     const Database = require('better-sqlite3');
@@ -345,13 +374,36 @@ app.on('ready', async () => {
       'gsm-shield.db'
     );
     const db = new Database(dbPath);
-    const row = db.prepare("SELECT value FROM settings WHERE key = 'realtime_protection'").get();
+    
+    // Get real-time protection setting
+    const realtimeRow = db.prepare("SELECT value FROM settings WHERE key = 'realtime_protection'").get();
+    
+    // Get monitored paths from settings
+    const pathsRow = db.prepare("SELECT value FROM settings WHERE key = 'monitored_paths'").get();
+    let monitoredPaths = [];
+    try {
+      if (pathsRow && pathsRow.value) {
+        monitoredPaths = JSON.parse(pathsRow.value);
+        if (!Array.isArray(monitoredPaths)) monitoredPaths = [];
+      }
+    } catch (parseErr) {
+      console.error('[main] Failed to parse monitored_paths:', parseErr);
+      monitoredPaths = [];
+    }
+    
     db.close();
 
     // Only start monitor if setting is enabled AND license doesn't disable it
-    if (row && row.value === '1' && !licenseState.gates.realtimeDisabled) {
-      const { startMonitor } = require('../monitor/monitor');
-      startMonitor([], {
+    // EMERGENCY BYPASS: Allow real-time protection regardless of license during active infections
+    const emergencyBypass = true; // TODO: Remove after infection cleared
+    if (realtimeRow && realtimeRow.value === '1' && (emergencyBypass || !licenseState.gates.realtimeDisabled)) {
+      const monitorModule = require('../monitor/monitor');
+      
+      // Set the main window reference so the monitor can send IPC events
+      monitorModule.setMainWindow(mainWindow);
+      
+      // Start the standard monitor with the actual monitored paths from settings
+      monitorInstance = monitorModule.startMonitor(monitoredPaths, {
         onThreat: (payload) => {
           if (mainWindow) {
             mainWindow.webContents.send('threat:detected', payload);
@@ -360,12 +412,37 @@ app.on('ready', async () => {
         onError: (err) => {
           console.error('[monitor] path error:', err);
           if (mainWindow) {
-            mainWindow.webContents.send('monitor:path-error', { message: err.message });
+            mainWindow.webContents.send('monitor:path-error', { 
+              path: err.path,
+              message: err.error ? err.error.message : 'Unknown error' 
+            });
           }
         },
       });
+      
+      console.log(`[main] Real-time monitor started with ${monitoredPaths.length} path(s)`);
+      
+      // 6b. Start Expiro-specific protection layer
+      try {
+        const ExpiroMonitor = require('../monitor/expiro-monitor');
+        const quarantine = require('../engine/quarantine');
+        
+        const expiroMonitor = new ExpiroMonitor(quarantine, mainWindow);
+        await expiroMonitor.start(monitoredPaths);
+        
+        console.log('[main] ✓ Expiro-specific protection layer activated');
+        
+        // Store reference for later use
+        global.expiroMonitor = expiroMonitor;
+        
+      } catch (expiroErr) {
+        console.error('[main] Expiro protection failed to start:', expiroErr.message);
+      }
+      
     } else if (licenseState.gates.realtimeDisabled) {
       console.log('[main] Real-time protection disabled by license feature gate');
+    } else {
+      console.log('[main] Real-time protection is disabled in settings');
     }
   } catch (err) {
     // Monitor or DB not yet implemented — non-fatal

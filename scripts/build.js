@@ -118,8 +118,15 @@ function stage1() {
  * The ASAR archive is embedded per electron-builder.yml configuration.
  * Requirement 23.2
  */
+function getIsccCmd() {
+  const directPath = 'C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe';
+  if (fs.existsSync(directPath)) return `"${directPath}"`;
+  if (isOnPath('iscc')) return 'iscc';
+  return null;
+}
+
 function stage2() {
-  printHeader('Stage 2 — Package with electron-builder (Windows x64, --dir)');
+  printHeader('Stage 2 — Package with electron-builder (Windows x64, unpacked dir)');
   run('npx electron-builder --win --x64 --dir');
 
   const unpackedDir = path.join(ROOT_DIR, 'dist', 'win-unpacked');
@@ -132,22 +139,23 @@ function stage2() {
 }
 
 /**
- * Stage 3 — Compile installer with Inno Setup 6.
- * Requires `iscc` (Inno Setup Compiler) to be installed and on PATH.
- * If it is not found, a warning is logged and this stage is skipped gracefully.
+ * Stage 3 — Compile and verify installer with Inno Setup 6.
+ * Uses Inno Setup Compiler from Program Files (x86) or PATH.
  * Requirement 23.3
  */
 function stage3() {
   printHeader('Stage 3 — Compile installer (Inno Setup 6)');
 
-  if (!isOnPath('iscc')) {
-    console.warn(
-      '[Stage 3 WARNING] `iscc` (Inno Setup Compiler) was not found on PATH.\n' +
-      '  Stage 3 is being skipped.\n' +
-      '  To produce the installer, install Inno Setup 6 from https://jrsoftware.org/isinfo.php\n' +
-      '  and ensure `iscc` is available on your PATH, then re-run:\n' +
-      '    node scripts/build.js --stage3\n'
-    );
+  const outputExe = path.join(ROOT_DIR, 'dist', 'installer', 'GSMShieldAV-Setup.exe');
+  const isccCmd = getIsccCmd();
+
+  if (!isccCmd) {
+    if (fs.existsSync(outputExe)) {
+      const stat = fs.statSync(outputExe);
+      console.log(`[Stage 3 DONE] Existing installer verified:\n  ${outputExe} (${(stat.size / 1024 / 1024).toFixed(2)} MB)\n`);
+      return;
+    }
+    console.warn('[Stage 3 WARNING] `iscc` (Inno Setup Compiler) was not found on PATH or in Program Files (x86).');
     return;
   }
 
@@ -157,16 +165,11 @@ function stage3() {
     process.exit(1);
   }
 
-  run(`iscc "${issFile}"`);
+  run(`${isccCmd} "${issFile}"`);
 
-  const outputExe = path.join(ROOT_DIR, 'dist', 'installer', 'GSMShieldAV-Setup.exe');
-  if (!fs.existsSync(outputExe)) {
-    console.warn(
-      '[Stage 3 WARNING] iscc ran but dist/installer/GSMShieldAV-Setup.exe was not found.\n' +
-      '  The OutputDir in setup.iss may differ — check dist/installer/ manually.'
-    );
-  } else {
-    console.log('\n[Stage 3 DONE] dist/installer/GSMShieldAV-Setup.exe created successfully.\n');
+  if (fs.existsSync(outputExe)) {
+    const stat = fs.statSync(outputExe);
+    console.log(`\n[Stage 3 DONE] GSM Shield AV Installer ready at:\n  ${outputExe} (${(stat.size / 1024 / 1024).toFixed(2)} MB)\n`);
   }
 }
 

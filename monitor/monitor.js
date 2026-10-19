@@ -204,9 +204,24 @@ function startMonitor(watchPaths, { onThreat, onError } = {}) {
   const watcher = chokidar.watch(filteredPaths, {
     persistent:    true,
     ignoreInitial: true,
+    depth:         6,
     awaitWriteFinish: {
       stabilityThreshold: 2000,
       pollInterval:        100,
+    },
+    ignored: (filePath) => {
+      const lower = filePath.toLowerCase();
+      return lower.includes('$recycle.bin') ||
+             lower.includes('system volume information') ||
+             lower.includes('\\winsxs') ||
+             lower.includes('\\servicing') ||
+             lower.includes('\\node_modules') ||
+             lower.includes('\\.git') ||
+             lower.includes('\\appdata\\local\\temp') ||
+             lower.includes('\\inetcache') ||
+             lower.includes('\\gsmshield\\quarantine') ||
+             lower.includes('\\gsmshieldav\\quarantine') ||
+             lower.includes('\\gsmshield\\backups');
     },
   });
 

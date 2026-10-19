@@ -352,9 +352,7 @@ function ensureQuarantineDir() {
  */
 function getDb() {
   if (!_db) {
-    throw new Error(
-      'Database has not been initialised. Call initDatabase() before getDb().'
-    );
+    return initDatabase();
   }
   return _db;
 }

@@ -20,9 +20,11 @@ import {
   Settings as SettingsIcon,
   Folder,
   Activity,
+  Cpu,
 } from 'lucide-react';
 
 import useSettingsStore from '../store/settingsStore';
+import useExpiroStore from '../store/expiroStore';
 
 // ── Toggle component ──────────────────────────────────────────────────────────
 
@@ -129,6 +131,10 @@ export default function Settings() {
   const updateDefinitions     = useSettingsStore((s) => s.updateDefinitions);
   const loadSettings          = useSettingsStore((s) => s.loadSettings);
 
+  const expiroThreshold       = useExpiroStore((s) => s.threshold);
+  const setExpiroThreshold    = useExpiroStore((s) => s.setThreshold);
+  const loadExpiroConfig      = useExpiroStore((s) => s.loadConfig);
+
   // ── Local state ───────────────────────────────────────────────────────────
   /** Whether the "add path" input row is visible */
   const [showAddPath, setShowAddPath]     = useState(false);
@@ -142,7 +148,8 @@ export default function Settings() {
   // ── Mount ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     loadSettings();
-  }, [loadSettings]);
+    loadExpiroConfig();
+  }, [loadSettings, loadExpiroConfig]);
 
   // Focus the add-path input when it becomes visible
   useEffect(() => {
@@ -236,6 +243,49 @@ export default function Settings() {
           checked={autoQuarantine}
           onChange={(val) => handleToggle('auto_quarantine', val)}
         />
+      </SectionCard>
+
+      {/* ── Expiro Protection section ──────────────────────────────────── */}
+      <SectionCard
+        title="Expiro Heuristic Shield (v2 Engine)"
+        icon={<Cpu className="w-4 h-4 text-indigo-400" />}
+      >
+        <div className="py-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-200">
+                Detection Sensitivity Threshold
+              </label>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Minimum score to flag PE binaries. 60% prevents false positives on modern dev tools.
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-800 p-1 rounded-lg border border-slate-700 self-start sm:self-auto">
+              {[
+                { label: '50% (Hunting)', value: 50 },
+                { label: '60% (Balanced)', value: 60 },
+                { label: '75% (Strict)', value: 75 },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setExpiroThreshold(opt.value)}
+                  className={`px-2.5 py-1 text-xs rounded font-medium transition ${
+                    expiroThreshold === opt.value
+                      ? 'bg-indigo-600 text-white shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg bg-indigo-500/10 border border-indigo-500/20 p-3 text-xs text-slate-300">
+            <span className="font-semibold text-indigo-400">10 Heuristics Active:</span> Entry Point tracking, W^X violations, section table validation, encrypted overlay analysis, known-packer discounts (-15), and injection API inspection.
+          </div>
+        </div>
       </SectionCard>
 
       {/* ── System section (18.3) ────────────────────────────────────── */}

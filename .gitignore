@@ -47,3 +47,8 @@ coverage/
 
 # VM control working directory (host<->guest temp files)
 .vmtmp/
+
+# Malware research samples and EICAR test vectors
+research/samples/
+research/testing/eicar/
+

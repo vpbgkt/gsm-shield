@@ -1,0 +1,11 @@
+"File","Status","QuarantinePath","OriginalPath","Confidence","Timestamp"
+"rg.exe","Quarantined","C:\GSMShield\Quarantine\Test\rg.exe","C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Microsoft VS Code\16507d91be\resources\app\node_modules.asar.unpacked\@vscode\ripgrep-universal\bin\win32-x64\rg.exe","50","2026-10-18 13:18:41"
+"wxc-exec.exe","Quarantined","C:\GSMShield\Quarantine\Test\wxc-exec.exe","C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Microsoft VS Code\16507d91be\resources\app\node_modules.asar.unpacked\@microsoft\mxc-sdk\bin\x64\wxc-exec.exe","50","2026-10-18 13:18:41"
+"rg.exe","Quarantined","C:\GSMShield\Quarantine\Test\rg_1.exe","C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Microsoft VS Code\2a59476c9b\resources\app\extensions\copilot\node_modules\@github\copilot\sdk\ripgrep\bin\win32-x64\rg.exe","50","2026-10-18 13:18:41"
+"wxc-exec.exe","Quarantined","C:\GSMShield\Quarantine\Test\wxc-exec_1.exe","C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Microsoft VS Code\2a59476c9b\resources\app\node_modules.asar.unpacked\@microsoft\mxc-sdk\bin\x64\wxc-exec.exe","50","2026-10-18 13:18:41"
+"rg.exe","Quarantined","C:\GSMShield\Quarantine\Test\rg_2.exe","C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Microsoft VS Code\2a59476c9b\resources\app\node_modules.asar.unpacked\@github\copilot-sdk-win32-x64\ripgrep\bin\win32-x64\rg.exe","50","2026-10-18 13:18:41"
+"rg.exe","Quarantined","C:\GSMShield\Quarantine\Test\rg_3.exe","C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Microsoft VS Code\16507d91be\resources\app\node_modules.asar.unpacked\@github\copilot-sdk-win32-x64\ripgrep\bin\win32-x64\rg.exe","50","2026-10-18 13:18:41"
+"ctest.exe","Failed","N/A",,,
+"Tracker.exe","Failed","N/A",,,
+"cpack.exe","Failed","N/A",,,
+"cmake.exe","Failed","N/A",,,

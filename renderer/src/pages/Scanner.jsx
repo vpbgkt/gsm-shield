@@ -19,8 +19,11 @@ import {
   Play,
   AlertTriangle,
   Clock,
+  Cpu,
+  ShieldCheck,
 } from 'lucide-react';
 import useScanStore from '../store/scanStore';
+import ExpiroScannerPanel from '../components/ExpiroScannerPanel';
 
 // ── Scan mode configuration ───────────────────────────────────────────────────
 
@@ -402,6 +405,7 @@ export default function Scanner() {
     if (isDone) loadHistory();
   }, [isDone, loadHistory]);
 
+  const [activeTab, setActiveTab] = React.useState('standard'); // 'standard' | 'expiro'
   const elapsedMs = startedAt ? (endedAt || now) - startedAt : 0;
 
   return (
@@ -415,57 +419,92 @@ export default function Scanner() {
         </p>
       </div>
 
-      {/* ── Scan trigger buttons (Requirement 15.1) ───────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {SCAN_MODES.map((cfg) => (
-          <ScanButton
-            key={cfg.mode}
-            {...cfg}
-            disabled={isRunning}
-            onStart={startScan}
-          />
-        ))}
+      {/* ── Mode selector tabs ────────────────────────────────────────────── */}
+      <div className="flex border-b border-slate-800 gap-2 pb-px">
+        <button
+          onClick={() => setActiveTab('standard')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'standard'
+              ? 'border-sky-500 text-sky-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+          }`}
+        >
+          <Search className="w-4 h-4" />
+          Standard Scanner
+        </button>
+        <button
+          onClick={() => setActiveTab('expiro')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'expiro'
+              ? 'border-indigo-500 text-indigo-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+          }`}
+        >
+          <Cpu className="w-4 h-4" />
+          Expiro PE Heuristic Scanner
+          <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-semibold text-indigo-300 border border-indigo-500/30">
+            v2 Engine
+          </span>
+        </button>
       </div>
 
-      {/* ── Running state: live progress + cancel (Requirement 15.2) ─────── */}
-      {isRunning && (
-        <ProgressBar
-          phase={phase}
-          currentFile={currentFile}
-          filesScanned={filesScanned}
-          threatsCount={threatsFound.length}
-          elapsedMs={elapsedMs}
-          onCancel={cancelScan}
-        />
-      )}
-
-      {/* ── Completed / cancelled state ───────────────────────────────────── */}
-      {isDone && (
-        <div className="space-y-3">
-          {/* Status summary row */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <StatusBadge status={status} />
-            {mode && (
-              <span className="text-xs text-slate-400">
-                {capitalize(mode)} scan — {filesScanned} file{filesScanned !== 1 ? 's' : ''} scanned in {formatElapsed(elapsedMs)}
-              </span>
-            )}
+      {activeTab === 'expiro' ? (
+        <ExpiroScannerPanel />
+      ) : (
+        <>
+          {/* ── Scan trigger buttons (Requirement 15.1) ───────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {SCAN_MODES.map((cfg) => (
+              <ScanButton
+                key={cfg.mode}
+                {...cfg}
+                disabled={isRunning}
+                onStart={startScan}
+              />
+            ))}
           </div>
 
-          {/* Error banner if the scan engine failed */}
-          {errorMessage && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-xs text-red-300">
-              {errorMessage}
+          {/* ── Running state: live progress + cancel (Requirement 15.2) ─────── */}
+          {isRunning && (
+            <ProgressBar
+              phase={phase}
+              currentFile={currentFile}
+              filesScanned={filesScanned}
+              threatsCount={threatsFound.length}
+              elapsedMs={elapsedMs}
+              onCancel={cancelScan}
+            />
+          )}
+
+          {/* ── Completed / cancelled state ───────────────────────────────────── */}
+          {isDone && (
+            <div className="space-y-3">
+              {/* Status summary row */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <StatusBadge status={status} />
+                {mode && (
+                  <span className="text-xs text-slate-400">
+                    {capitalize(mode)} scan — {filesScanned} file{filesScanned !== 1 ? 's' : ''} scanned in {formatElapsed(elapsedMs)}
+                  </span>
+                )}
+              </div>
+
+              {/* Error banner if the scan engine failed */}
+              {errorMessage && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-xs text-red-300">
+                  {errorMessage}
+                </div>
+              )}
+
+              {/* Threats found list (Requirement 15.3) */}
+              <ThreatsPanel threats={threatsFound} />
             </div>
           )}
 
-          {/* Threats found list (Requirement 15.3) */}
-          <ThreatsPanel threats={threatsFound} />
-        </div>
+          {/* ── Scan history (Requirement 15.4) ──────────────────────────────── */}
+          <HistoryPanel history={history} />
+        </>
       )}
-
-      {/* ── Scan history (Requirement 15.4) ──────────────────────────────── */}
-      <HistoryPanel history={history} />
     </div>
   );
 }

@@ -1,0 +1,216 @@
+﻿C:\Program Files (x86)\WiX Toolset v3.14\bin\x86\burn.exe
+C:\Program Files\VMware\VMware Workstation\vmware.exe
+C:\Program Files (x86)\Radmin VPN\RvRvpnGui.exe
+C:\Program Files (x86)\WiX Toolset v3.14\bin\ThmViewer.exe
+C:\Program Files (x86)\Inno Setup 6\islzma32.exe
+C:\Program Files (x86)\Hewlett-Packard\Digital Imaging\bin\hpqusgm.exe
+C:\PROGRA~2\HEWLET~1\DIGITA~1\bin\hpqusgl.exe
+C:\Program Files (x86)\Hewlett-Packard\Digital Imaging\bin\hpqusgl.exe
+C:\Program Files (x86)\WinFsp\SxS\sxs.20260510T035357Z\bin\launcher-x86.exe
+C:\Program Files (x86)\WinFsp\SxS\sxs.20260510T035357Z\bin\launchctl-x86.exe
+C:\Program Files (x86)\Internet Download Manager\idmBroker.exe
+C:\Program Files (x86)\WinFsp\SxS\sxs.20260510T035357Z\bin\launchctl-x64.exe
+C:\Program Files (x86)\WinFsp\SxS\sxs.20260510T035357Z\bin\fsptool-x86.exe
+C:\Program Files (x86)\Internet Download Manager\IDMan.exe
+C:\Program Files (x86)\Internet Download Manager\IDMMsgHost.exe
+C:\Program Files (x86)\Internet Download Manager\IEMonitor.exe
+C:\Program Files (x86)\Internet Download Manager\MediumILStart.exe
+C:\Program Files (x86)\Internet Download Manager\IDMIntegrator64.exe
+C:\Program Files (x86)\Internet Download Manager\IDMGrHlp.exe
+C:\Program Files (x86)\Internet Download Manager\Uninstall.exe
+C:\Program Files (x86)\WinFsp\SxS\sxs.20260510T035357Z\bin\fsptool-x64.exe
+C:\Program Files (x86)\TurboServiceMobile\temp\usb_filter.exe
+C:\Program Files (x86)\TSM-PRO Edition\tmp\usb_filter.exe
+C:\Program Files (x86)\Inno Setup 6\islzma64.exe
+C:\Program Files (x86)\Google\GoogleUpdater\157.0.8089.0\updater.exe
+C:\Program Files\VMware\VMware Workstation\vmware-autostart.exe
+C:\Windows\System32\dllhost.exe
+C:\Windows\System32\ReFsDedupSvc.exe
+C:\Program Files (x86)\Radmin VPN\RvGuiStarter.exe
+C:\Program Files (x86)\Radmin VPN\RvFwHelper.exe
+C:\Program Files (x86)\Radmin VPN\Radmin.exe
+C:\Program Files (x86)\Radmin VPN\drvinst.exe
+C:\Program Files (x86)\QUALCOMM Incorporated\Qualcomm USB Drivers For Windows\DriverPackage\Qualcomm\Tools\qdcfg.exe
+C:\Program Files (x86)\QUALCOMM Incorporated\Qualcomm USB Drivers For Windows\DriverPackage\Qualcomm\Tools\logReader.exe
+C:\Program Files (x86)\QUALCOMM Incorporated\Qualcomm USB Drivers For Windows\DriverPackage\Qualcomm\DriverInstaller64.exe
+C:\Program Files (x86)\OpenAL\oalinst.exe
+C:\Program Files (x86)\MRST TEAM\MRST PRO\data\debug_tool\fastboot.exe
+C:\Program Files (x86)\Hewlett-Packard\Digital Imaging\bin\hpqusgh.exe
+C:\Program Files\MuseHub\current\MuseHub.exe
+C:\Program Files (x86)\Google\Update\GoogleUpdate.exe
+C:\Program Files\Moto-M Tool\busybox.exe
+C:\Program Files\Moto-M Tool\adb.exe
+C:\Program Files (x86)\Microsoft\Copilot\Application\155.0.4283.60\elevation_service.exe
+C:\Program Files (x86)\Microsoft\Edge\Application\155.0.4283.45\elevation_service.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\155.1.97.59\elevation_service.exe
+C:\Program Files\Microsoft OneDrive\26.178.0913.0007\FileSyncHelper.exe
+C:\Program Files\MuseHub\current\MuseHub.Updater.exe
+C:\Program Files\Windows Media Player\wmpnetwk.exe
+C:\Windows\System32\DriverStore\FileRepository\iclsclient.inf_amd64_9783a0a827c7c2a2\lib\PlatformLicenseManagerService.exe
+C:\Windows\System32\SensorDataService.exe
+C:\Windows\System32\sppsvc.exe
+C:\Program Files (x86)\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe
+C:\Program Files\3uTools9\3uLauncher.exe
+C:\Program Files\MOBILedit Forensic\Stop_Conflicting_Services.exe
+C:\Program Files\MOBILedit Forensic\QtWebEngineProcess.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\setuptools\gui.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\setuptools\gui-64.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\setuptools\gui-32.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\setuptools\cli.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\setuptools\cli-64.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\setuptools\cli-32.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\pip\_vendor\distlib\w64.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\pip\_vendor\distlib\w32.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\pip\_vendor\distlib\t64.exe
+C:\Program Files\MOBILedit Forensic\python36\Lib\site-packages\pip\_vendor\distlib\t32.exe
+C:\Program Files\MOBILedit Forensic\Drivers\DriverInstaller64.exe
+C:\Program Files\MOBILedit Forensic\Drivers\DriverInstaller32.exe
+C:\Program Files\MOBILedit Forensic\CreateCrashDump.exe
+C:\Program Files\MOBILedit Forensic\ApkVerifier.exe
+C:\Program Files\MOBILedit Forensic\7z\7za.exe
+C:\Program Files\LibUSB-Win32\bin\x86\testlibusb.exe
+C:\Program Files\LibUSB-Win32\bin\x86\testlibusb-win.exe
+C:\Program Files\LibUSB-Win32\bin\testlibusb.exe
+C:\Program Files\LibUSB-Win32\bin\testlibusb-win.exe
+C:\Program Files\LibUSB-Win32\bin\install-filter.exe
+C:\Program Files\LibUSB-Win32\bin\install-filter-win.exe
+C:\Program Files\LibUSB-Win32\bin\inf-wizard.exe
+C:\Program Files\HP\HP LaserJet M1005 MFP\Uninstall.exe
+C:\Program Files\HP\HP LaserJet M1005 MFP\Scan To\hppscan0.exe
+C:\Program Files\HP\HP LaserJet M1005 MFP\ProdInst64.exe
+C:\Program Files\Google\Chrome\Application\PlatformExperienceHelper\platform_experience_helper.exe
+C:\Program Files\Google\Chrome\Application\chrome_proxy.exe
+C:\Program Files\Google\Chrome\Application\155.0.8059.82\os_update_handler.exe
+C:\Program Files\Google\Chrome\Application\155.0.8059.82\notification_helper.exe
+C:\Program Files\Google\Chrome\Application\155.0.8059.82\Installer\setup.exe
+C:\Program Files\Google\Chrome\Application\155.0.8059.82\Installer\chrmstp.exe
+C:\Program Files\Google\Chrome\Application\155.0.8059.82\elevated_tracing_service.exe
+C:\Program Files\Google\Chrome\Application\155.0.8059.82\chrome_pwa_launcher.exe
+C:\Program Files\Git\usr\bin\winpty.exe
+C:\Program Files\Git\usr\bin\winpty-debugserver.exe
+C:\Program Files\Git\usr\bin\winpty-agent.exe
+C:\Program Files\Git\usr\bin\tset.exe
+C:\Program Files\Git\usr\bin\tput.exe
+C:\Program Files\Git\usr\bin\toe.exe
+C:\Program Files\Git\usr\bin\tic.exe
+C:\Program Files\Git\usr\bin\tabs.exe
+C:\Program Files\Git\usr\bin\sh.exe
+C:\Program Files\Git\usr\bin\reset.exe
+C:\Program Files\Git\usr\bin\infotocap.exe
+C:\Program Files\Git\usr\bin\infocmp.exe
+C:\Program Files\Git\usr\bin\clear.exe
+C:\Program Files\Git\usr\bin\captoinfo.exe
+C:\Program Files\Git\usr\bin\bash.exe
+C:\Program Files\Git\mingw64\share\git\git-wrapper.exe
+C:\Program Files\Git\mingw64\share\git\compat-bash.exe
+C:\Program Files\Git\mingw64\libexec\git-core\scalar.exe
+C:\Program Files\Git\mingw64\libexec\git-core\headless-git.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-sh-i18n--envsubst.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-remote-https.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-remote-http.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-remote-ftps.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-remote-ftp.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-imap-send.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-http-push.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-http-fetch.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-http-backend.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-daemon.exe
+C:\Program Files\Git\mingw64\libexec\git-core\git-credential-wincred.exe
+C:\Program Files\Git\mingw64\bin\wintoast.exe
+C:\Program Files\Git\mingw64\bin\scalar.exe
+C:\Program Files\Git\mingw64\bin\openssl.exe
+C:\Program Files\Git\mingw64\bin\git-receive-pack.exe
+C:\Program Files\Git\mingw64\bin\git-lfs.exe
+C:\Program Files\Git\mingw64\bin\curl.exe
+C:\Program Files\Git\git-cmd.exe
+C:\Program Files\Git\git-bash.exe
+C:\Program Files\Git\cmd\tig.exe
+C:\Program Files\Git\cmd\scalar.exe
+C:\Program Files\Git\cmd\gitk.exe
+C:\Program Files\Git\cmd\git-upload-pack.exe
+C:\Program Files\Git\cmd\git-receive-pack.exe
+C:\Program Files\Git\cmd\git-lfs.exe
+C:\Program Files\Git\cmd\git-gui.exe
+C:\Program Files\Git\bin\sh.exe
+C:\Program Files\Git\bin\git.exe
+C:\Program Files\Git\bin\bash.exe
+C:\Program Files\dotnet\sdk\10.0.301\Roslyn\bincore\VBCSCompiler.exe
+C:\Program Files\dotnet\sdk\10.0.301\Roslyn\bincore\vbc.exe
+C:\Program Files\dotnet\sdk\10.0.301\Roslyn\bincore\csc.exe
+C:\Program Files\dotnet\sdk\10.0.301\MSBuild.exe
+C:\Program Files\dotnet\sdk\10.0.301\DotnetTools\dotnet-format\shims\net10.0\win-x86\dotnet-format.exe
+C:\Program Files\dotnet\sdk\10.0.301\DotnetTools\dotnet-format\shims\net10.0\win-x64\dotnet-format.exe
+C:\Program Files\dotnet\sdk\10.0.301\DotnetTools\dotnet-format\dotnet-format.exe
+C:\Program Files\dotnet\sdk\10.0.301\AppHostTemplate\apphost.exe
+C:\Program Files\dotnet\dotnet.exe
+C:\Program Files\Common Files\microsoft shared\VSTO\10.0\VSTOInstaller.exe
+C:\Program Files\Common Files\microsoft shared\ClickToRun\officesvcmgr.exe
+C:\Program Files\Common Files\microsoft shared\ClickToRun\OfficeC2RClient.exe
+C:\Program Files\Common Files\microsoft shared\ClickToRun\MavInject32.exe
+C:\Program Files\Common Files\microsoft shared\ClickToRun\IntegratedOffice.exe
+C:\Program Files\Common Files\microsoft shared\ClickToRun\AppVShNotify.exe
+C:\Program Files\Common Files\microsoft shared\ClickToRun\appvcleaner.exe
+C:\Program Files\Common Files\Bitdefender\SetupInformation\CL-27-9041FB35-66EA-4FBD-AD27-9708B663CB60\installer.exe
+C:\Program Files\CMake\bin\ctest.exe
+C:\Program Files\CMake\bin\cpack.exe
+C:\Program Files\CMake\bin\cmcldeps.exe
+C:\Program Files\CMake\bin\cmake.exe
+C:\Program Files\CMake\bin\cmake-gui.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\chrome_proxy.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\155.1.97.59\notification_helper.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\155.1.97.59\Installer\setup.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\155.1.97.59\Installer\chrmstp.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\155.1.97.59\chrome_pwa_launcher.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\155.1.97.59\brave_vpn_helper.exe
+C:\Program Files\BraveSoftware\Brave-Browser\Application\155.1.97.59\BraveVpnWireguardService\brave_vpn_wireguard_service.exe
+C:\Program Files\7-Zip\Uninstall.exe
+C:\Program Files\7-Zip\7zG.exe
+C:\Program Files\7-Zip\7zFM.exe
+C:\Program Files\7-Zip\7z.exe
+C:\Program Files\3uTools9\updater.exe
+C:\Users\CLOUD ENGINEER\Desktop\Audacity_Installer_via_MuseHub.exe
+C:\Program Files\3uTools9\Uninstall.exe
+C:\Program Files\3uTools9\QtWebEngineProcess.exe
+C:\Program Files\3uTools9\itunesFlashDll\iTunesFlash.exe
+C:\Program Files\3uTools9\iCloudDll\Anisette.exe
+C:\Program Files\3uTools9\files\patchtools\7z-64\7z.exe
+C:\Program Files\3uTools9\files\patchtools\7z-32\7z.exe
+C:\Program Files\3uTools9\files\inf\InfInstallerx86.exe
+C:\Program Files\3uTools9\files\inf\InfInstallerx64.exe
+C:\Program Files\3uTools9\CrashReport.exe
+C:\Program Files\3uTools9\3uViewer.exe
+C:\Program Files\3uTools9\3uTools.exe
+C:\LJM1005_MFP_Full_Solution\Uninstall.exe
+C:\LJM1005_MFP_Full_Solution\Setup.exe
+C:\LJM1005_MFP_Full_Solution\ProdInst64.exe
+C:\LJM1005_MFP_Full_Solution\ProdInst.exe
+C:\LJM1005_MFP_Full_Solution\Pad.exe
+C:\LJM1005_MFP_Full_Solution\install.exe
+C:\LJM1005_MFP_Full_Solution\HPSetup.exe
+C:\LJM1005_MFP_Full_Solution\HPNotes.exe
+C:\LJM1005_MFP_Full_Solution\HPInstErr.exe
+C:\LJM1005_MFP_Full_Solution\dotnetfx20.exe
+C:\lj1005hb-en\ZUNINST.EXE
+C:\lj1005hb-en\zstatus.exe
+C:\lj1005hb-en\ZSPOOL32.EXE
+C:\lj1005hb-en\ZPRINT32.EXE
+C:\lj1005hb-en\spldr.exe
+C:\lj1005hb-en\fwdl.exe
+C:\lj1005hb-en\apptune5.exe
+C:\3uTools9\Other\iTunes(12.13.10.3).exe
+C:\3uTools9\Other\iTunes(12.13.10.3) (1).exe
+D:\gsmworkspace\GsmMeta\server\node_modules\nodemon\bin\windows-kill.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Perfect Download Manager\PDM.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Kiro\tools\inno_updater.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Kiro\resources\app\node_modules.asar.unpacked\node-pty\build\Release\conpty\OpenConsole.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Kiro\resources\app\extensions\kiro.kiro-agent\dist\kiro-sandbox-windows-x64.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Kiro\resources\app\node_modules.asar.unpacked\@vscode\ripgrep-universal\bin\win32-x64\rg.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Kiro\resources\app\extensions\kiro.kiro-agent\node_modules\@vscode\ripgrep-win32-x64\bin\rg.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Python\Python314\python.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Python\Python314\pythonw.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Kiro\Kiro.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\GitHubDesktop\GitHubDesktop.exe
+C:\Users\CLOUD ENGINEER\AppData\Local\Programs\Recordly\Recordly.exe

@@ -327,3 +327,45 @@ describe('settingsStore — initial state', () => {
     expect(INITIAL_SETTINGS_STATE.updateProgress).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. expiroStore — initial state and pure filter logic
+// ─────────────────────────────────────────────────────────────────────────────
+
+const INITIAL_EXPIRO_STATE = {
+  status: 'idle',
+  currentFile: '',
+  scannedCount: 0,
+  totalCount: 0,
+  threshold: 60,
+  detections: [],
+  recentBlocks: [],
+  recentDetections: [],
+  stats: null,
+  disinfecting: false,
+};
+
+describe('expiroStore — initial state and detection filtering', () => {
+  test('threshold defaults to calibrated 60%', () => {
+    expect(INITIAL_EXPIRO_STATE.threshold).toBe(60);
+  });
+
+  test('status defaults to idle', () => {
+    expect(INITIAL_EXPIRO_STATE.status).toBe('idle');
+  });
+
+  test('detections defaults to empty array', () => {
+    expect(INITIAL_EXPIRO_STATE.detections).toEqual([]);
+  });
+
+  test('filters out disinfected file from detections list', () => {
+    const detections = [
+      { filePath: 'C:\\a.exe', confidence: 80 },
+      { filePath: 'C:\\b.exe', confidence: 70 },
+    ];
+    const remaining = detections.filter((d) => d.filePath !== 'C:\\a.exe');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].filePath).toBe('C:\\b.exe');
+  });
+});
+

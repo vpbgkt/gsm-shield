@@ -121,7 +121,47 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // window:close — →
   windowClose:      invoke('window:close'),
 
+  // ── Expiro Protection — invoke channels ────────────────────────────────────
+  // expiro:scan-file { filePath } → { success, result }
+  expiroScanFile:            invoke('expiro:scan-file'),
+  // expiro:scan-files { filePaths } → { success, results, summary }
+  expiroScanFiles:           invoke('expiro:scan-files'),
+  // expiro:scan-directory { dirPath, maxDepth? } → { success, results, summary }
+  expiroScanDirectory:       invoke('expiro:scan-directory'),
+  // expiro:disinfect-file { filePath, detection } → { success, result }
+  expiroDisinfectFile:       invoke('expiro:disinfect-file'),
+  // expiro:disinfect-batch { detections } → { success, result }
+  expiroDisinfectBatch:      invoke('expiro:disinfect-batch'),
+  // expiro:get-stats — → { success, stats }
+  expiroGetStats:            invoke('expiro:get-stats'),
+  // expiro:generate-report — → { success, report }
+  expiroGenerateReport:      invoke('expiro:generate-report'),
+  // expiro:scan-before-execution { filePath } → { success, allowed, reason }
+  expiroScanBeforeExecution: invoke('expiro:scan-before-execution'),
+  // expiro:update-paths { paths } → { success, message }
+  expiroUpdatePaths:         invoke('expiro:update-paths'),
+  // expiro:get-config — → { success, detectionThreshold, certaintyThreshold, highEntropyThreshold }
+  expiroGetConfig:           invoke('expiro:get-config'),
+  // expiro:set-threshold { threshold } → { success, threshold }
+  expiroSetThreshold:        invoke('expiro:set-threshold'),
+
   // ── Push listeners (main → renderer) ──────────────────────────────────────
+
+  // expiro:scan-progress { scanned, total, infected, currentFile }
+  onExpiroScanProgress:  onPush('expiro:scan-progress'),
+  offExpiroScanProgress: offPush('expiro:scan-progress'),
+
+  // expiro:disinfect-progress { processed, total, successful, failed, currentFile }
+  onExpiroDisinfectProgress:  onPush('expiro:disinfect-progress'),
+  offExpiroDisinfectProgress: offPush('expiro:disinfect-progress'),
+
+  // expiro:blocked { filePath, threatName, confidence, action, timestamp }
+  onExpiroBlocked:  onPush('expiro:blocked'),
+  offExpiroBlocked: offPush('expiro:blocked'),
+
+  // expiro:detected { filePath, threatName, confidence, action, timestamp }
+  onExpiroDetected:  onPush('expiro:detected'),
+  offExpiroDetected: offPush('expiro:detected'),
 
   // scan:progress { scanId, currentFile, filesScanned }
   onScanProgress:  onPush('scan:progress'),

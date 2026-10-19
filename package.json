@@ -12,7 +12,7 @@
     "dev:renderer": "vite --config renderer/vite.config.js",
     "dev:electron": "cross-env NODE_ENV=development electron .",
     "build": "npm run build:renderer && npm run build:electron",
-    "build:renderer": "vite build --config renderer/vite.config.js",
+    "build:renderer": "npm --prefix renderer run build",
     "build:electron": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir",
     "build:full": "node scripts/build.js",
@@ -20,7 +20,11 @@
     "build:stage2": "node scripts/build.js --stage2",
     "build:stage3": "node scripts/build.js --stage3",
     "start": "electron .",
+    "cli": "node bin/gsmshield.js",
     "test": "jest --runInBand"
+  },
+  "bin": {
+    "gsmshield": "./bin/gsmshield.js"
   },
   "dependencies": {
     "better-sqlite3": "11.10.0",

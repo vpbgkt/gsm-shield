@@ -9,6 +9,7 @@ directories:
 
 # Files to include in the packaged app
 files:
+  - bin/**/*
   - electron/**/*
   - engine/**/*
   - monitor/**/*
@@ -42,6 +43,9 @@ win:
   sign: null
   signAndEditExecutable: false
   target:
+    - target: nsis
+      arch:
+        - x64
     - target: dir
       arch:
         - x64

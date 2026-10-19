@@ -131,26 +131,72 @@ function registerWindowsService(db) {
       monitoredPaths,
       registeredAt: new Date().toISOString(),
     };
-    fs.mkdirSync(resolveAppDataDir(), { recursive: true });
+    
+    const appDataDir = resolveAppDataDir();
+    
+    // Ensure directory exists (with better error handling)
+    try {
+      if (!fs.existsSync(appDataDir)) {
+        fs.mkdirSync(appDataDir, { recursive: true });
+      }
+    } catch (mkdirErr) {
+      console.error('[settings-handlers] Failed to create AppData directory:', mkdirErr);
+      throw new Error(`Cannot create directory ${appDataDir}: ${mkdirErr.message}`);
+    }
+    
     fs.writeFileSync(serviceConfigPath(), JSON.stringify(config, null, 2), 'utf8');
 
     // Lazy require — node-windows may not be installed in dev environment
-    const NodeWindows = require('node-windows'); // eslint-disable-line
+    let NodeWindows;
+    try {
+      NodeWindows = require('node-windows'); // eslint-disable-line
+    } catch (requireErr) {
+      console.warn('[settings-handlers] node-windows not available:', requireErr.message);
+      console.warn('[settings-handlers] Start-with-Windows feature disabled');
+      return;
+    }
+    
     const Service = NodeWindows.Service;
+    
+    // Determine script path - must handle .asar packaging
+    let scriptPath = path.join(__dirname, '..', '..', 'monitor', 'service-wrapper.js');
+    
+    // When running from .asar, extract service-wrapper.js to AppData
+    if (scriptPath.includes('.asar')) {
+      const extractedScriptPath = path.join(appDataDir, 'service-wrapper.js');
+      
+      // Copy service-wrapper.js from asar to real file system
+      try {
+        const scriptContent = fs.readFileSync(scriptPath, 'utf8');
+        fs.writeFileSync(extractedScriptPath, scriptContent, 'utf8');
+        scriptPath = extractedScriptPath;
+        console.log('[settings-handlers] Extracted service script to:', scriptPath);
+      } catch (extractErr) {
+        console.error('[settings-handlers] Failed to extract service script:', extractErr);
+        throw new Error(`Cannot extract service script: ${extractErr.message}`);
+      }
+    }
 
     const svc = new Service({
       name: 'GSM Shield AV Monitor',
       description: 'GSM Shield AV real-time file-system protection service',
-      script: path.join(__dirname, '..', '..', 'monitor', 'service-wrapper.js'),
+      script: scriptPath,
     });
 
     svc.on('install', () => {
+      console.log('[settings-handlers] Windows service installed successfully');
       svc.start();
+    });
+    
+    svc.on('error', (err) => {
+      console.error('[settings-handlers] Windows service error:', err);
     });
 
     svc.install();
   } catch (err) {
     console.error('[settings-handlers] Failed to register Windows service:', err.message);
+    console.error('[settings-handlers] Full error:', err);
+    throw err; // Re-throw so the outer try/catch in settings:set can handle it
   }
 }
 
@@ -160,21 +206,41 @@ function registerWindowsService(db) {
  */
 function unregisterWindowsService() {
   try {
-    const NodeWindows = require('node-windows'); // eslint-disable-line
+    let NodeWindows;
+    try {
+      NodeWindows = require('node-windows'); // eslint-disable-line
+    } catch (requireErr) {
+      console.warn('[settings-handlers] node-windows not available:', requireErr.message);
+      return;
+    }
+    
     const Service = NodeWindows.Service;
+    
+    // Use the same script path logic as register
+    let scriptPath = path.join(__dirname, '..', '..', 'monitor', 'service-wrapper.js');
+    
+    // When running from .asar, use the extracted version
+    if (scriptPath.includes('.asar')) {
+      scriptPath = path.join(resolveAppDataDir(), 'service-wrapper.js');
+    }
 
     const svc = new Service({
       name: 'GSM Shield AV Monitor',
-      script: path.join(__dirname, '..', '..', 'monitor', 'service-wrapper.js'),
+      script: scriptPath,
     });
 
     svc.on('uninstall', () => {
       console.log('[settings-handlers] Windows service uninstalled.');
     });
+    
+    svc.on('error', (err) => {
+      console.error('[settings-handlers] Windows service uninstall error:', err);
+    });
 
     svc.uninstall();
   } catch (err) {
     console.error('[settings-handlers] Failed to unregister Windows service:', err.message);
+    throw err; // Re-throw so the outer try/catch can handle it
   }
 }
 
@@ -249,7 +315,7 @@ function register(ipcMain, { getDb, getMainWindow, getMonitor, getUpdater }) {
   // Validates key, updates the row, and handles side-effects.
   // Requirement 18.1 (realtime_protection), 18.2 (auto_quarantine),
   // 18.3 (start_with_windows), 18.6 (telemetry_enabled).
-  ipcMain.handle('settings:set', (_event, { key, value }) => {
+  ipcMain.handle('settings:set', async (_event, { key, value }) => {
     if (!KNOWN_SETTINGS_KEYS.includes(key)) {
       return { success: false, error: `Unknown settings key: ${key}` };
     }
@@ -259,10 +325,69 @@ function register(ipcMain, { getDb, getMainWindow, getMonitor, getUpdater }) {
 
     // Side-effect: start_with_windows service registration (Requirement 11.1, 11.2)
     if (key === 'start_with_windows') {
+      try {
+        if (value === '1') {
+          registerWindowsService(db);
+        } else if (value === '0') {
+          unregisterWindowsService();
+        }
+      } catch (serviceErr) {
+        console.error('[settings:set] Windows service operation failed:', serviceErr);
+        // Don't fail the entire settings update - just log the error
+        // The setting will still be saved but service won't be registered
+      }
+    }
+
+    // Side-effect: realtime_protection toggle (start/stop monitor)
+    if (key === 'realtime_protection') {
+      const monitor = getMonitor ? getMonitor() : null;
+      const monitorModule = require('../../monitor/monitor');
+      
       if (value === '1') {
-        registerWindowsService(db);
+        // Starting real-time protection
+        if (!monitor) {
+          // Get monitored paths from settings
+          const pathsRaw = getSetting(db, 'monitored_paths') || '[]';
+          let monitoredPaths = [];
+          try {
+            monitoredPaths = JSON.parse(pathsRaw);
+            if (!Array.isArray(monitoredPaths)) monitoredPaths = [];
+          } catch (_) {
+            monitoredPaths = [];
+          }
+          
+          // Start the monitor
+          const win = getMainWindow();
+          monitorModule.setMainWindow(win);
+          
+          const newMonitor = monitorModule.startMonitor(monitoredPaths, {
+            onThreat: (payload) => {
+              if (win) {
+                win.webContents.send('threat:detected', payload);
+              }
+            },
+            onError: (err) => {
+              console.error('[monitor] path error:', err);
+              if (win) {
+                win.webContents.send('monitor:path-error', { 
+                  path: err.path,
+                  message: err.error ? err.error.message : 'Unknown error' 
+                });
+              }
+            },
+          });
+          
+          // Note: We can't update the getMonitor closure from here,
+          // but the monitor will be running. A full app restart is
+          // recommended for complete integration.
+          console.log(`[settings] Real-time monitor started with ${monitoredPaths.length} path(s)`);
+        }
       } else if (value === '0') {
-        unregisterWindowsService();
+        // Stopping real-time protection
+        if (monitor) {
+          monitorModule.stopMonitor(monitor);
+          console.log('[settings] Real-time monitor stopped');
+        }
       }
     }
 

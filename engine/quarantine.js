@@ -69,7 +69,7 @@ function ensureQuarantineDir() {
  *
  * @param {string} filePath - Absolute path to the file to quarantine
  * @param {string} threatName - Name/identifier of the threat detected
- * @returns {Promise<void>}
+ * @returns {Promise<{quarantinePath: string, fileHash: string, fileSize: number}>}
  */
 async function quarantineFile(filePath, threatName) {
   ensureQuarantineDir();
@@ -110,6 +110,9 @@ async function quarantineFile(filePath, threatName) {
     VALUES (?, ?, ?, ?, ?)
   `);
   stmt.run(filePath, quarantinePath, threatName, fileHash, fileSize);
+
+  // 6. Return quarantine metadata for callers (disinfector etc.)
+  return { quarantinePath, fileHash, fileSize };
 }
 
 /**
@@ -148,8 +151,19 @@ async function restoreFile(id) {
     );
   }
 
-  // Restore file to original location (atomic rename)
-  fs.renameSync(quarantine_path, original_path);
+  // Restore file to original location.
+  // Handle EXDEV (cross-volume) the same way quarantineFile does:
+  // fall back to copy-then-delete if rename fails across volumes.
+  try {
+    fs.renameSync(quarantine_path, original_path);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      fs.copyFileSync(quarantine_path, original_path);
+      fs.unlinkSync(quarantine_path);
+    } else {
+      throw err;
+    }
+  }
 
   // Delete quarantine record
   const deleteStmt = db.prepare('DELETE FROM quarantine WHERE id = ?');

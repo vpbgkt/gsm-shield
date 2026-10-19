@@ -52,9 +52,8 @@ OutputBaseFilename=GSMShieldAV-Setup
 SetupIconFile=..\assets\icons\tray-green.ico
 
 ; ---- Compression ----
-Compression=lzma2/max
-SolidCompression=yes
-LZMAUseSeparateProcess=yes
+Compression=zip
+SolidCompression=no
 
 ; ---- Wizard appearance (Req 22.2) ----
 WizardStyle=modern

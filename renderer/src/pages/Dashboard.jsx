@@ -184,25 +184,44 @@ export default function Dashboard() {
         </div>
 
         {/* Quick Scan card */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 flex flex-col justify-between">
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 flex flex-col justify-between space-y-4">
           <div>
             <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-2">
               <Zap className="w-4 h-4 text-sky-400" />
               Quick Actions
             </h2>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Run a Quick Scan to check your most vulnerable locations for
-              threats in seconds.
+              Run targeted threat scans across memory, common entry vectors, and PE executables.
             </p>
+
+            <div className="mt-4 rounded-lg bg-indigo-500/10 border border-indigo-500/20 p-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-semibold text-indigo-300">Expiro Shield Active</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                v2 Heuristic Engine with 10-layer PE analysis and packer discount protection.
+              </p>
+            </div>
           </div>
 
-          <button
-            onClick={() => navigate('/scanner')}
-            className="mt-6 w-full flex items-center justify-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 transition-colors py-3 px-4 text-sm font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-          >
-            <Zap className="w-4 h-4" />
-            Quick Scan
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => navigate('/scanner')}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 transition-colors py-2.5 px-4 text-sm font-semibold text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+            >
+              <Zap className="w-4 h-4" />
+              Quick Scan (ClamAV)
+            </button>
+
+            <button
+              onClick={() => navigate('/scanner')}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 transition-colors py-2.5 px-4 text-sm font-semibold text-white shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            >
+              <ShieldAlert className="w-4 h-4" />
+              Expiro PE Deep Scan
+            </button>
+          </div>
         </div>
       </div>
     </div>
