@@ -42,6 +42,7 @@ async function countFiles(targets, signal, onTick) {
   const MAX_FILES = 1000000;
   const DEADLINE = Date.now() + 20000; // 20s hard cap
   let count = 0;
+  let iterations = 0;
   const stack = [...targets];
 
   while (stack.length > 0) {
@@ -69,6 +70,11 @@ async function countFiles(targets, signal, onTick) {
     } else if (st.isFile()) {
       count++;
       if (onTick && count % 200 === 0) onTick(count, p);
+    }
+
+    iterations++;
+    if (iterations % 100 === 0) {
+      await new Promise((r) => setImmediate(r));
     }
   }
   return count;

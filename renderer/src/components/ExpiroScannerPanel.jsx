@@ -39,6 +39,7 @@ export default function ExpiroScannerPanel() {
     disinfectAll,
     clearNotice,
     resetScan,
+    cancelScan,
   } = useExpiroStore();
 
   const [inputPath, setInputPath] = useState('C:\\Program Files\\Git');
@@ -155,14 +156,24 @@ export default function ExpiroScannerPanel() {
             />
           </div>
 
-          <button
-            onClick={handleStartScan}
-            disabled={isScanning || !inputPath.trim()}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white px-5 py-2.5 text-sm font-medium shadow-md transition-colors"
-          >
-            <Search className="h-4 w-4" />
-            {isScanning ? 'Analyzing PE...' : 'Run Expiro Scan'}
-          </button>
+          {isScanning ? (
+            <button
+              onClick={cancelScan}
+              className="flex items-center gap-2 rounded-lg bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white px-5 py-2.5 text-sm font-medium shadow-md transition-colors"
+            >
+              <X className="h-4 w-4" />
+              Cancel Scan
+            </button>
+          ) : (
+            <button
+              onClick={handleStartScan}
+              disabled={!inputPath.trim()}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white px-5 py-2.5 text-sm font-medium shadow-md transition-colors"
+            >
+              <Search className="h-4 w-4" />
+              Run Expiro Scan
+            </button>
+          )}
         </div>
 
         {/* Quick Location Shortcuts */}
@@ -191,15 +202,23 @@ export default function ExpiroScannerPanel() {
 
       {/* Progress View */}
       {isScanning && (
-        <div className="rounded-xl border border-indigo-500/40 bg-slate-900/90 p-5 space-y-3 animate-pulse">
+        <div className="rounded-xl border border-indigo-500/40 bg-slate-900/90 p-5 space-y-3">
           <div className="flex items-center justify-between text-xs text-slate-300">
             <span className="font-medium text-indigo-400 flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
-              PE Structural Analysis in Progress...
+              PE Structural Analysis in Progress (Worker Thread)...
             </span>
-            <span className="font-mono tabular-nums">
-              {scannedCount} PE files analyzed
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono tabular-nums text-slate-300 font-medium">
+                {scannedCount} PE files analyzed
+              </span>
+              <button
+                onClick={cancelScan}
+                className="text-xs text-rose-400 hover:text-rose-300 hover:underline font-medium px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 transition-colors"
+              >
+                Stop Scan
+              </button>
+            </div>
           </div>
 
           <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">

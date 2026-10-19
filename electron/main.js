@@ -3,6 +3,13 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
+// Hardware acceleration and performance optimization switches
+if (app?.commandLine?.appendSwitch) {
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
+  app.commandLine.appendSwitch('enable-zero-copy');
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+}
+
 // Prevent main process abrupt termination and log unexpected exceptions
 process.on('uncaughtException', (err) => {
   console.error('[main] 💥 Uncaught Exception in main process:', err?.stack || err);
@@ -194,6 +201,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // Ensures animations, progress bars and UI update smoothly even when window loses focus
+      spellcheck: false,           // Avoid spellchecking PE file paths / scanner logs
     },
   });
 

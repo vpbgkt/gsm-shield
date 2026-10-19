@@ -276,6 +276,26 @@ describe('Expiro Detector v2', () => {
       expect(result.reasons.some(r => r.includes('packer discount') || r.includes('benign packer'))).toBe(true);
     });
 
+    test('should NOT flag VMProtect-packed binary as infected (false-positive fix)', () => {
+      const peBuf = buildMinimalPE({
+        sections: [
+          { name: '.text', characteristics: 0x60000020, rawSize: 512, virtualSize: 512 },
+          { name: '.data', characteristics: 0xC0000040, rawSize: 512, virtualSize: 512 },
+          { name: '.rdata', characteristics: 0x40000040, rawSize: 512, virtualSize: 512 },
+          { name: '.vmp0', characteristics: 0x60000020, rawSize: 512, virtualSize: 512, entropy: 'high' },
+          { name: '.vmp1', characteristics: 0x60000020, rawSize: 512, virtualSize: 512, entropy: 'high' },
+        ],
+        entryPointSection: 4, // Entry in .vmp1
+      });
+
+      const tempFile = path.join(tempDir, 'vmprotect-binary.dll');
+      fs.writeFileSync(tempFile, peBuf);
+
+      const result = detectExpiroInfection(tempFile);
+      expect(result.isInfected).toBe(false);
+      expect(result.confidence).toBe(0);
+    });
+
     test('should flag file with many suspicious sections', () => {
       const sections = [];
       for (let i = 0; i < 10; i++) {

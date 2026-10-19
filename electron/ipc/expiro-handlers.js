@@ -9,8 +9,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const { Worker } = require('worker_threads');
 const expiroDetector = require('../../engine/expiro-detector');
 const ExpiroDisinfector = require('../../engine/expiro-disinfector');
+
+let activeWorker = null;
 
 /**
  * Register all Expiro-related IPC handlers
@@ -39,30 +42,86 @@ function register(ipcMain, { getQuarantine, getMainWindow }) {
   });
 
   /**
-   * Scan multiple files
+   * Scan multiple files via Worker thread to keep UI completely responsive
    */
   ipcMain.handle('expiro:scan-files', async (event, { filePaths }) => {
     try {
-      const results = await expiroDetector.scanFiles(
-        filePaths,
-        (progress) => {
-          // Send progress updates to renderer
-          const win = getMainWindow();
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('expiro:scan-progress', progress);
+      if (!Array.isArray(filePaths) || filePaths.length === 0) {
+        return {
+          success: true,
+          results: [],
+          summary: { total: 0, infected: 0, clean: 0 },
+        };
+      }
+
+      if (activeWorker) {
+        try {
+          await activeWorker.terminate();
+        } catch (_) {}
+        activeWorker = null;
+      }
+
+      const win = getMainWindow();
+      const workerPath = path.join(__dirname, '../../engine/expiro-scanner-worker.js');
+
+      return await new Promise((resolve) => {
+        let resolved = false;
+        const worker = new Worker(workerPath, {
+          workerData: {
+            filePaths,
+            threshold: expiroDetector.EXPIRO_SIGNATURES.detectionThreshold,
+          },
+        });
+        activeWorker = worker;
+
+        worker.on('message', (msg) => {
+          if (!msg) return;
+          if (msg.type === 'progress') {
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('expiro:scan-progress', msg);
+            }
+          } else if (msg.type === 'complete') {
+            if (!resolved) {
+              resolved = true;
+              activeWorker = null;
+              resolve({
+                success: true,
+                results: msg.results || [],
+                summary: msg.summary || {
+                  total: msg.totalFiles,
+                  infected: (msg.results || []).length,
+                  clean: msg.totalFiles - (msg.results || []).length,
+                },
+                cancelled: Boolean(msg.cancelled),
+              });
+            }
+          } else if (msg.type === 'error') {
+            if (!resolved) {
+              resolved = true;
+              activeWorker = null;
+              resolve({ success: false, error: msg.error });
+            }
           }
-        }
-      );
-      
-      return {
-        success: true,
-        results,
-        summary: {
-          total: results.length,
-          infected: results.filter(r => r.isInfected).length,
-          clean: results.filter(r => !r.isInfected).length,
-        },
-      };
+        });
+
+        worker.on('error', (err) => {
+          if (!resolved) {
+            resolved = true;
+            activeWorker = null;
+            resolve({ success: false, error: err.message });
+          }
+        });
+
+        worker.on('exit', (code) => {
+          if (activeWorker === worker) {
+            activeWorker = null;
+          }
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: `Worker exited with code ${code}` });
+          }
+        });
+      });
     } catch (error) {
       return {
         success: false,
@@ -243,6 +302,7 @@ function register(ipcMain, { getQuarantine, getMainWindow }) {
 
   /**
    * Recursively scan a folder for PE executables using Expiro heuristics
+   * Executed via Worker Thread so Electron main process remains 100% responsive
    */
   ipcMain.handle('expiro:scan-directory', async (event, { dirPath, maxDepth = 4 }) => {
     try {
@@ -250,94 +310,98 @@ function register(ipcMain, { getQuarantine, getMainWindow }) {
         return { success: false, error: 'Directory does not exist' };
       }
 
-      const peFiles = [];
-      // Only user-mode PE executables and libraries (Expiro does not infect kernel .sys drivers)
-      const peExts = new Set(['.exe', '.dll', '.scr']);
-
-      // Directories that should always be excluded from heuristic traversal:
-      // - Quarantine & backup repositories (never re-scan already-isolated files)
-      // - System volume, trash, and recovery folders
-      // - Developer build caches
-      const skipNames = new Set([
-        '$recycle.bin',
-        'system volume information',
-        'recovery',
-        'node_modules',
-        '.git',
-        'winsxs',
-        'servicing',
-        'assembly',
-        'microsoft.net',
-        'installer',
-        '$windows.~bt',
-        '$windows.~ws',
-      ]);
-
-      function walk(currentDir, currentDepth) {
-        if (currentDepth > maxDepth) return;
+      if (activeWorker) {
         try {
-          const entries = fs.readdirSync(currentDir, { withFileTypes: true });
-          for (const entry of entries) {
-            const lowerName = entry.name.toLowerCase();
-            if (skipNames.has(lowerName)) continue;
-
-            const fullPath = path.join(currentDir, entry.name);
-            const lowerPath = fullPath.toLowerCase();
-
-            // Skip quarantine & backup directories
-            if (lowerPath.includes('\\gsmshield\\quarantine') ||
-                lowerPath.includes('\\gsmshieldav\\quarantine') ||
-                lowerPath.includes('\\gsmshield\\backups')) {
-              continue;
-            }
-
-            if (entry.isDirectory()) {
-              // Avoid following junctions/symlinks which cause infinite loops
-              try {
-                if (fs.lstatSync(fullPath).isSymbolicLink()) continue;
-              } catch (_) {}
-
-              walk(fullPath, currentDepth + 1);
-            } else if (entry.isFile()) {
-              const ext = path.extname(fullPath).toLowerCase();
-              if (peExts.has(ext)) {
-                peFiles.push(fullPath);
-              }
-            }
-          }
+          await activeWorker.terminate();
         } catch (_) {}
+        activeWorker = null;
       }
 
-      walk(dirPath, 0);
-
       const win = getMainWindow();
-      const scanRes = await expiroDetector.scanFiles(
-        peFiles,
-        (progress) => {
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('expiro:scan-progress', progress);
+      const workerPath = path.join(__dirname, '../../engine/expiro-scanner-worker.js');
+
+      return await new Promise((resolve) => {
+        let resolved = false;
+        const worker = new Worker(workerPath, {
+          workerData: {
+            dirPath,
+            maxDepth,
+            threshold: expiroDetector.EXPIRO_SIGNATURES.detectionThreshold,
+          },
+        });
+        activeWorker = worker;
+
+        worker.on('message', (msg) => {
+          if (!msg) return;
+          if (msg.type === 'progress') {
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('expiro:scan-progress', msg);
+            }
+          } else if (msg.type === 'complete') {
+            if (!resolved) {
+              resolved = true;
+              activeWorker = null;
+              resolve({
+                success: true,
+                totalFiles: msg.totalFiles,
+                results: msg.results || [],
+                summary: msg.summary || {
+                  total: msg.totalFiles,
+                  infected: (msg.results || []).length,
+                  clean: msg.totalFiles - (msg.results || []).length,
+                },
+                cancelled: Boolean(msg.cancelled),
+              });
+            }
+          } else if (msg.type === 'error') {
+            if (!resolved) {
+              resolved = true;
+              activeWorker = null;
+              resolve({ success: false, error: msg.error });
+            }
           }
-        },
-        { onlyInfected: true }
-      );
+        });
 
-      const detections = scanRes.detections || [];
-      const totalScanned = scanRes.scannedCount || peFiles.length;
-      const infectedCount = scanRes.infectedCount || detections.length;
+        worker.on('error', (err) => {
+          if (!resolved) {
+            resolved = true;
+            activeWorker = null;
+            resolve({ success: false, error: err.message });
+          }
+        });
 
-      return {
-        success: true,
-        totalFiles: totalScanned,
-        results: detections, // Return only infected files to prevent IPC serialization overflow
-        summary: {
-          total: totalScanned,
-          infected: infectedCount,
-          clean: totalScanned - infectedCount,
-        },
-      };
+        worker.on('exit', (code) => {
+          if (activeWorker === worker) {
+            activeWorker = null;
+          }
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: `Worker exited with code ${code}` });
+          }
+        });
+      });
     } catch (error) {
       return { success: false, error: error.message };
     }
+  });
+
+  /**
+   * Cancel an ongoing Expiro scan worker
+   */
+  ipcMain.handle('expiro:cancel-scan', async () => {
+    if (activeWorker) {
+      try {
+        activeWorker.postMessage({ type: 'cancel' });
+        setTimeout(() => {
+          if (activeWorker) {
+            activeWorker.terminate().catch(() => {});
+            activeWorker = null;
+          }
+        }, 500);
+      } catch (_) {}
+      return { success: true, message: 'Scan cancellation requested' };
+    }
+    return { success: true, message: 'No active scan worker' };
   });
 
   /**

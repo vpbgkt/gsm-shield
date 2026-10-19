@@ -31,14 +31,29 @@ const EXPIRO_SIGNATURES = {
     '.stub',
   ],
 
-  // Sections that are benign packers / installers — reduce scoring, don't flag
+  // Sections that are benign packers / protectors / installers — reduce scoring, don't flag
   benignPackerSections: [
     'UPX0',
     'UPX1',
     'UPX2',
+    'UPX3',
     '.aspack',
     '.adata',
     '.ndata',
+    '.vmp0',
+    '.vmp1',
+    '.vmp2',
+    'vmp0',
+    'vmp1',
+    'vmp2',
+    '.themida',
+    '.winlic',
+    'Themida',
+    '.enigma1',
+    '.enigma2',
+    '.mpress1',
+    '.mpress2',
+    '.obsid',
   ],
 
   // Benign compiler / PGO / Windows optimization code sections
@@ -80,6 +95,21 @@ const INJECTION_APIS = [
   'NtWriteVirtualMemory',
   'RtlMoveMemory',
 ];
+
+/**
+ * Check if a section name belongs to a known benign packer or software protector
+ * (e.g. VMProtect .vmp0/.vmp1, UPX, Themida, ASPack, Enigma)
+ * @param {string} name - Section name
+ * @returns {boolean} True if known benign packer section
+ */
+function isBenignPackerSection(name) {
+  if (!name || typeof name !== 'string') return false;
+  const clean = name.trim();
+  if (EXPIRO_SIGNATURES.benignPackerSections.some(s => s.toLowerCase() === clean.toLowerCase())) {
+    return true;
+  }
+  return /^\.?(vmp|upx|themida|winlic|enigma|mpress|obsid|aspack)\d?$/i.test(clean);
+}
 
 /**
  * Calculate Shannon entropy of byte buffer
@@ -124,6 +154,7 @@ function bufferContainsString(buffer, str) {
  * @returns {Object|null} PE metadata or null if not a valid PE
  */
 function parsePEHeader(filePath) {
+  let fd = null;
   try {
     const stats = fs.statSync(filePath);
     if (!stats.isFile() || stats.size < 64) {
@@ -134,7 +165,18 @@ function parsePEHeader(filePath) {
       return null;
     }
 
-    const buffer = fs.readFileSync(filePath);
+    const fileSize = stats.size;
+    const isLargeFile = fileSize > 2 * 1024 * 1024;
+    let buffer;
+
+    if (!isLargeFile) {
+      buffer = fs.readFileSync(filePath);
+    } else {
+      fd = fs.openSync(filePath, 'r');
+      const headerSize = Math.min(fileSize, 65536);
+      buffer = Buffer.alloc(headerSize);
+      fs.readSync(fd, buffer, 0, headerSize, 0);
+    }
     
     // Check DOS header (MZ signature)
     if (buffer.length < 64 || buffer[0] !== 0x4D || buffer[1] !== 0x5A) {
@@ -144,17 +186,28 @@ function parsePEHeader(filePath) {
     // Get PE header offset
     const peOffset = buffer.readUInt32LE(0x3C);
     
-    if (peOffset < 0 || peOffset >= buffer.length - 4) {
+    if (peOffset < 0 || peOffset >= fileSize - 4) {
       return null;  // Invalid PE offset
+    }
+
+    // In rare cases where PE header is beyond 64KB on a large file, read that section
+    if (peOffset + 256 > buffer.length && isLargeFile) {
+      const extraSize = Math.min(fileSize - peOffset, 65536);
+      const newBuf = Buffer.alloc(peOffset + extraSize);
+      buffer.copy(newBuf, 0, 0, buffer.length);
+      fs.readSync(fd, newBuf, peOffset, extraSize, peOffset);
+      buffer = newBuf;
     }
     
     // Check PE signature
-    if (buffer[peOffset] !== 0x50 || buffer[peOffset + 1] !== 0x45) {
+    if (peOffset + 2 > buffer.length || buffer[peOffset] !== 0x50 || buffer[peOffset + 1] !== 0x45) {
       return null;  // Not a valid PE file
     }
     
     // Parse COFF header
     const coffOffset = peOffset + 4;
+    if (coffOffset + 20 > buffer.length) return null;
+
     const numberOfSections = buffer.readUInt16LE(coffOffset + 2);
     const timeDateStamp = buffer.readUInt32LE(coffOffset + 4);
     const optionalHeaderSize = buffer.readUInt16LE(coffOffset + 16);
@@ -169,16 +222,13 @@ function parsePEHeader(filePath) {
     const is64bit = (magic === 0x20B);
     
     // Get entry point
-    const entryPointRVA = buffer.readUInt32LE(optHeaderOffset + 16);
+    const entryPointRVA = optHeaderOffset + 20 <= buffer.length ? buffer.readUInt32LE(optHeaderOffset + 16) : 0;
     
     // Get image size and checksum
     let imageSize = 0;
     let checksum = 0;
     try {
-      if (is64bit) {
-        imageSize = buffer.readUInt32LE(optHeaderOffset + 56);
-        checksum = buffer.readUInt32LE(optHeaderOffset + 64);
-      } else {
+      if (optHeaderOffset + 68 <= buffer.length) {
         imageSize = buffer.readUInt32LE(optHeaderOffset + 56);
         checksum = buffer.readUInt32LE(optHeaderOffset + 64);
       }
@@ -195,7 +245,6 @@ function parsePEHeader(filePath) {
     
     for (let i = 0; i < numberOfSections; i++) {
       const sectionOffset = sectionTableOffset + (i * 40);
-      
       if (sectionOffset + 40 > buffer.length) break;
       
       const nameBytes = buffer.slice(sectionOffset, sectionOffset + 8);
@@ -209,11 +258,18 @@ function parsePEHeader(filePath) {
       
       // Calculate entropy of section data (sample first 8KB for performance)
       let entropy = 0;
-      if (rawOffset < buffer.length && rawSize > 0) {
+      if (rawOffset < fileSize && rawSize > 0) {
         const sampleSize = Math.min(rawSize, 8192);
-        const endPos = Math.min(rawOffset + sampleSize, buffer.length);
-        const sectionData = buffer.slice(rawOffset, endPos);
-        entropy = calculateEntropy(sectionData);
+        if (rawOffset + sampleSize <= buffer.length) {
+          const sectionData = buffer.slice(rawOffset, rawOffset + sampleSize);
+          entropy = calculateEntropy(sectionData);
+        } else if (fd !== null) {
+          try {
+            const sectionBuf = Buffer.alloc(sampleSize);
+            const bytesRead = fs.readSync(fd, sectionBuf, 0, sampleSize, rawOffset);
+            entropy = calculateEntropy(sectionBuf.slice(0, bytesRead));
+          } catch (_) {}
+        }
       }
       
       // Track where sections end (for overlay calculation)
@@ -237,21 +293,28 @@ function parsePEHeader(filePath) {
     }
     
     // Parse Optional Header Data Directory 4: IMAGE_DIRECTORY_ENTRY_SECURITY (Certificate Table)
-    // In PE format: PE32 (0x10B) data dirs start at optHeaderOffset + 96, PE32+ (0x20B) at optHeaderOffset + 112
     const dataDirBase = is64bit ? optHeaderOffset + 112 : optHeaderOffset + 96;
     let certOffset = 0;
     let certSize = 0;
     let hasAuthenticodeCert = false;
 
     if (dataDirBase + 40 <= buffer.length) {
-      // Security directory is directory index 4 (offset: dataDirBase + 4 * 8 = dataDirBase + 32)
       certOffset = buffer.readUInt32LE(dataDirBase + 32);
       certSize = buffer.readUInt32LE(dataDirBase + 36);
 
-      if (certOffset > 0 && certSize > 0 && certOffset + 8 <= buffer.length) {
+      if (certOffset > 0 && certSize > 0 && certOffset + 8 <= fileSize) {
         try {
-          const dwLength = buffer.readUInt32LE(certOffset);
-          const wCertificateType = buffer.readUInt16LE(certOffset + 6);
+          let dwLength = 0;
+          let wCertificateType = 0;
+          if (certOffset + 8 <= buffer.length) {
+            dwLength = buffer.readUInt32LE(certOffset);
+            wCertificateType = buffer.readUInt16LE(certOffset + 6);
+          } else if (fd !== null) {
+            const certHdr = Buffer.alloc(8);
+            fs.readSync(fd, certHdr, 0, 8, certOffset);
+            dwLength = certHdr.readUInt32LE(0);
+            wCertificateType = certHdr.readUInt16LE(6);
+          }
           // WIN_CERT_TYPE_PKCS_SIGNED_DATA = 0x0002
           if (wCertificateType === 2 || dwLength === certSize) {
             hasAuthenticodeCert = true;
@@ -260,26 +323,32 @@ function parsePEHeader(filePath) {
       }
     }
 
-    // Calculate non-certificate overlay (data appended after last section excluding legitimate Authenticode certificate table)
+    // Calculate non-certificate overlay
     let nonCertOverlay = 0;
     if (hasAuthenticodeCert && certOffset >= lastSectionEnd) {
-      // Authenticode certificate sits in the overlay. The real unexpected overlay is whatever remains after the certificate.
       const certEnd = certOffset + certSize;
-      nonCertOverlay = Math.max(0, buffer.length - certEnd);
+      nonCertOverlay = Math.max(0, fileSize - certEnd);
     } else {
-      nonCertOverlay = Math.max(0, buffer.length - lastSectionEnd);
+      nonCertOverlay = Math.max(0, fileSize - lastSectionEnd);
     }
 
     const overlaySize = nonCertOverlay;
     
-    // Calculate overlay entropy (if there's meaningful non-certificate overlay data)
+    // Calculate overlay entropy
     let overlayEntropy = 0;
     if (overlaySize > 1024) {
-      const overlaySample = buffer.slice(
-        buffer.length - overlaySize,
-        Math.min(buffer.length - overlaySize + 8192, buffer.length)
-      );
-      overlayEntropy = calculateEntropy(overlaySample);
+      const overlayOffset = fileSize - overlaySize;
+      const sampleSize = Math.min(overlaySize, 8192);
+      if (overlayOffset + sampleSize <= buffer.length) {
+        const overlaySample = buffer.slice(overlayOffset, overlayOffset + sampleSize);
+        overlayEntropy = calculateEntropy(overlaySample);
+      } else if (fd !== null) {
+        try {
+          const overlayBuf = Buffer.alloc(sampleSize);
+          const bytesRead = fs.readSync(fd, overlayBuf, 0, sampleSize, overlayOffset);
+          overlayEntropy = calculateEntropy(overlayBuf.slice(0, bytesRead));
+        } catch (_) {}
+      }
     }
     
     // Scan for injection APIs in the file (imports region — first 64KB of file)
@@ -296,7 +365,7 @@ function parsePEHeader(filePath) {
       imageSize,
       checksum,
       sections,
-      fileSize: buffer.length,
+      fileSize,
       overlaySize,
       overlayEntropy,
       lastSectionEnd,
@@ -309,6 +378,12 @@ function parsePEHeader(filePath) {
   } catch (error) {
     console.error(`[expiro-detector] Error parsing PE: ${error.message}`);
     return null;
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch (_) {}
+    }
   }
 }
 
@@ -353,27 +428,26 @@ function detectExpiroInfection(filePath) {
         }
       }
       
-      // Check for benign packer sections (reduce false positives)
-      for (const packerName of EXPIRO_SIGNATURES.benignPackerSections) {
-        if (section.name === packerName) {
-          isKnownPacker = true;
-          break;
-        }
+      // Check for benign packer / protector sections (reduce false positives)
+      if (isBenignPackerSection(section.name)) {
+        isKnownPacker = true;
       }
     }
     
     // ── Heuristic 2: Unusual number of sections ──
     // Normal PE: 3-8 sections. Modern multimedia codecs/Windows DLLs frequently have 8-12.
-    // Expiro adds 1-2 rogue sections.
+    // VMProtect, Themida, and GCC/MinGW binaries standardly have 10-15.
     if (pe.numberOfSections > 12) {
-      const score = isKnownPacker ? 5 : 15;  // Reduced weight for packed files
-      result.confidence += score;
-      result.reasons.push(`Unusual section count: ${pe.numberOfSections} (normal: 3-12)`);
+      if (!isKnownPacker) {
+        result.confidence += 15;
+        result.reasons.push(`Unusual section count: ${pe.numberOfSections} (normal: 3-12)`);
+      }
     }
     
     // ── Heuristic 3: High entropy executable sections ──
     // Encrypted/polymorphic code has entropy > 7.0
     // Exclude legitimate compiler/PGO sections (.no_bbt, fothk, etc.)
+    // Exclude legitimate known packer sections (.vmp0/.vmp1, UPX, etc.)
     const isBenignCodeSection = (name) => {
       const lower = name.toLowerCase();
       return EXPIRO_SIGNATURES.benignCodeSections.some(b => lower.startsWith(b.toLowerCase()));
@@ -382,7 +456,8 @@ function detectExpiroInfection(filePath) {
     const highEntropySections = pe.sections.filter(s => 
       s.isExecutable && 
       s.entropy > EXPIRO_SIGNATURES.highEntropyThreshold &&
-      !isBenignCodeSection(s.name)
+      !isBenignCodeSection(s.name) &&
+      !isBenignPackerSection(s.name)
     );
     
     if (highEntropySections.length > 0) {
@@ -404,12 +479,11 @@ function detectExpiroInfection(filePath) {
     
     if (epSection) {
       const normalEpSections = /^(\.text|CODE|\.code|_text)$/i;
-      const benignPackerEp = /^(UPX\d|\.aspack|\.adata|\.rsrc)$/i;
       
       if (!epSection.name.match(normalEpSections)) {
-        if (epSection.name.match(benignPackerEp)) {
-          // Entry in packer section — low weight
-          result.confidence += 5;
+        if (isBenignPackerSection(epSection.name)) {
+          // Entry in known packer/protector stub (e.g. .vmp1, UPX0) — standard behavior for packers
+          isKnownPacker = true;
           result.reasons.push(`Entry point in packer section: ${epSection.name} (benign packer)`);
         } else {
           result.confidence += 25;
@@ -463,8 +537,8 @@ function detectExpiroInfection(filePath) {
     
     // ── Heuristic 8: PE Checksum anomaly (NEW) ──
     // Signed/official PE files have valid checksums. Expiro corrupts them.
-    // Do not flag if file has a valid Authenticode certificate table.
-    if (pe.checksum !== 0 && !pe.hasAuthenticodeCert) {
+    // Do not flag if file has a valid Authenticode certificate table or is a known packer.
+    if (pe.checksum !== 0 && !pe.hasAuthenticodeCert && !isKnownPacker) {
       if (result.confidence >= 35) {
         result.confidence += 5;
         result.reasons.push('PE checksum present but file shows infection indicators');
@@ -496,13 +570,24 @@ function detectExpiroInfection(filePath) {
       }
     }
     
-    // ── Known-packer discount ──
-    // If the file is a known-packer executable and confidence is borderline,
-    // apply a discount to avoid false positives. Many clean tools use UPX.
-    if (isKnownPacker && result.confidence > 0 && result.confidence < EXPIRO_SIGNATURES.certaintyThreshold) {
-      const discount = Math.min(15, result.confidence);
-      result.confidence -= discount;
-      result.reasons.push(`Known-packer discount applied: -${discount} (packer signatures found)`);
+    // ── Protection for known-packer binaries ──
+    // If a file is packed with a legitimate protector (VMProtect, UPX, Themida, ASPack, Enigma)
+    // and has NO hard viral indicators (e.g. .expiro section or viral overlay),
+    // it must NEVER be flagged as Expiro.
+    if (isKnownPacker) {
+      const hasHardViralIndicator = result.reasons.some(r => 
+        r.includes('Suspicious section name') || 
+        r.includes('Suspicious overlay') || 
+        r.includes('Entry point in unusual section')
+      );
+      if (!hasHardViralIndicator) {
+        result.confidence = 0;
+        result.reasons = ['Known benign packer verified — no viral indicators found'];
+      } else if (result.confidence < EXPIRO_SIGNATURES.certaintyThreshold) {
+        const discount = Math.min(15, result.confidence);
+        result.confidence -= discount;
+        result.reasons.push(`Known-packer discount applied: -${discount} (packer signatures found)`);
+      }
     }
 
     // ── Protection for Authenticode-signed components ──

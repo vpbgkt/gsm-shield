@@ -160,6 +160,24 @@ const useExpiroStore = create((set, get) => {
     },
 
     /**
+     * Cancel an active Expiro scan
+     */
+    cancelScan: async () => {
+      try {
+        if (window.electronAPI?.expiroCancelScan) {
+          await window.electronAPI.expiroCancelScan();
+        }
+        set({
+          status: 'idle',
+          currentFile: '',
+          errorMessage: 'Scan cancelled by user',
+        });
+      } catch (err) {
+        console.error('[expiroStore] Failed to cancel scan:', err);
+      }
+    },
+
+    /**
      * Scan a single file with Expiro heuristics
      */
     scanFile: async (filePath) => {

@@ -144,6 +144,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   expiroGetConfig:           invoke('expiro:get-config'),
   // expiro:set-threshold { threshold } → { success, threshold }
   expiroSetThreshold:        invoke('expiro:set-threshold'),
+  // expiro:cancel-scan — → { success, message }
+  expiroCancelScan:          invoke('expiro:cancel-scan'),
 
   // ── Push listeners (main → renderer) ──────────────────────────────────────
 
