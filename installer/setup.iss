@@ -136,6 +136,12 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\GSMShie
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\GSMShieldAV"; \
     ValueType: string; ValueName: "UninstallString";      ValueData: "{uninstallexe}"
 
+; Auto-start with Windows in system tray (Req 11.1, 12.1)
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+    ValueType: string; ValueName: "{#AppName}"; \
+    ValueData: """{app}\{#AppExeName}"" --minimized"; \
+    Flags: uninsdeletevalue
+
 ; ============================================================
 ; POST-INSTALL: DEFENDER REPLACEMENT (Req 22.4)
 ; ============================================================
@@ -164,6 +170,11 @@ Filename: "powershell.exe"; \
 Filename: "powershell.exe"; \
     Parameters: "-ExecutionPolicy Bypass -NonInteractive -File ""{app}\resources\scripts\register-wsc.ps1"""; \
     Flags: runhidden waituntilterminated; StatusMsg: "Registering GSM Shield AV with Windows Security Center..."
+
+; Step 3 - Launch GSM Shield AV to activate real-time protection immediately
+Filename: "{app}\{#AppExeName}"; \
+    Description: "Launch {#AppName}"; \
+    Flags: nowait postinstall skipifsilent
 
 ; ============================================================
 ; UNINSTALL SEQUENCE (Req 22.5)

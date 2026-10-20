@@ -206,9 +206,11 @@ function createWindow() {
     },
   });
 
-  // Show window once it is ready to avoid white flash
+  // Show window once it is ready to avoid white flash (unless launched with --minimized)
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    if (!process.argv.includes('--minimized')) {
+      mainWindow.show();
+    }
   });
 
   // Requirement 12.1 — hide instead of quit on close
@@ -399,6 +401,11 @@ app.on('ready', async () => {
       console.error('[main] Failed to parse monitored_paths:', parseErr);
       monitoredPaths = [];
     }
+
+    const monitorModule = require('../monitor/monitor');
+    if (!Array.isArray(monitoredPaths) || monitoredPaths.length === 0) {
+      monitoredPaths = monitorModule.getDefaultMonitoredPaths();
+    }
     
     db.close();
 
@@ -406,8 +413,6 @@ app.on('ready', async () => {
     // EMERGENCY BYPASS: Allow real-time protection regardless of license during active infections
     const emergencyBypass = true; // TODO: Remove after infection cleared
     if (realtimeRow && realtimeRow.value === '1' && (emergencyBypass || !licenseState.gates.realtimeDisabled)) {
-      const monitorModule = require('../monitor/monitor');
-      
       // Set the main window reference so the monitor can send IPC events
       monitorModule.setMainWindow(mainWindow);
       

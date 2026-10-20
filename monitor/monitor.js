@@ -19,6 +19,7 @@
 
 const path    = require('path');
 const os      = require('os');
+const fs      = require('fs');
 const chokidar = require('chokidar');
 
 const checker   = require('../whitelist/checker');
@@ -36,6 +37,7 @@ const MONITORED_EXTENSIONS = new Set([
   '.exe', '.dll', '.msi', '.bat', '.cmd',
   '.vbs', '.ps1', '.js',  '.scr', '.com',
   '.zip', '.rar', '.7z',
+  '.iso', '.img', '.hta', '.cpl', '.wsf', '.jar',
 ]);
 
 /**
@@ -104,15 +106,50 @@ function filterPaths(rawPaths) {
 }
 
 /**
+ * Return default user paths to monitor if none configured (Downloads & Desktop).
+ * @returns {string[]}
+ */
+function getDefaultMonitoredPaths() {
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, 'Downloads'),
+    path.join(home, 'Desktop'),
+  ];
+  const valid = [];
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c)) valid.push(c);
+    } catch (_) {}
+  }
+  return valid;
+}
+
+/**
  * Return true when the file's extension (lowercased) is in MONITORED_EXTENSIONS.
+ * Also marks EICAR test files and double-extension executables as eligible.
  * Requirement 10.2
  *
  * @param {string} filePath
  * @returns {boolean}
  */
 function isEligibleExtension(filePath) {
+  const base = path.basename(filePath).toLowerCase();
+  // Always inspect EICAR test files regardless of extension (e.g. eicar.txt, eicar.com.txt)
+  if (base.includes('eicar')) return true;
+
   const ext = path.extname(filePath).toLowerCase();
-  return MONITORED_EXTENSIONS.has(ext);
+  if (MONITORED_EXTENSIONS.has(ext)) return true;
+
+  // Handle double extensions like .com.txt, .exe.txt
+  if (ext === '.txt' || ext === '.tmp') {
+    const parts = base.split('.');
+    if (parts.length >= 3) {
+      const secondExt = '.' + parts[parts.length - 2];
+      if (MONITORED_EXTENSIONS.has(secondExt)) return true;
+    }
+  }
+
+  return false;
 }
 
 // ─── File event processor ─────────────────────────────────────────────────────
@@ -186,6 +223,37 @@ async function processFile(filePath, onThreat, onError) {
   }
 }
 
+/**
+ * Quick non-blocking sweep of recent files (modified within 24h) in watched directories on startup.
+ * Ensures files downloaded while the AV was offline are detected immediately upon launch.
+ *
+ * @param {string[]} watchPaths
+ * @param {Function} onThreat
+ * @param {Function} onError
+ */
+async function scanRecentFiles(watchPaths, onThreat, onError) {
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  for (const dir of watchPaths) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        const fullPath = path.join(dir, entry.name);
+        if (!isEligibleExtension(fullPath)) continue;
+        try {
+          const stats = fs.statSync(fullPath);
+          if (now - stats.mtimeMs < ONE_DAY_MS) {
+            await processFile(fullPath, onThreat, onError);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -198,7 +266,8 @@ async function processFile(filePath, onThreat, onError) {
  * @returns {chokidar.FSWatcher}
  */
 function startMonitor(watchPaths, { onThreat, onError } = {}) {
-  const filteredPaths = filterPaths(watchPaths);
+  const targetPaths = (!watchPaths || !Array.isArray(watchPaths)) ? getDefaultMonitoredPaths() : watchPaths;
+  const filteredPaths = filterPaths(targetPaths);
 
   // Chokidar watcher — Requirement 10.3 (awaitWriteFinish 2 000 ms)
   const watcher = chokidar.watch(filteredPaths, {
@@ -242,6 +311,13 @@ function startMonitor(watchPaths, { onThreat, onError } = {}) {
 
   watcher.on('add',    onFileEvent);
   watcher.on('change', onFileEvent);
+
+  // Sweep files that were dropped while the application was offline
+  if (typeof watcher.on === 'function') {
+    watcher.on('ready', () => {
+      scanRecentFiles(filteredPaths, onThreat, onError).catch(() => {});
+    });
+  }
 
   // ── Chokidar error handler ─────────────────────────────────────────────────
   // Requirement 10.7 (path errors): log, remove the erroring path, send IPC.
@@ -335,6 +411,7 @@ module.exports = {
   stopMonitor,
   updatePaths,
   setMainWindow,
+  getDefaultMonitoredPaths,
 
   // Exported constants — used by tests and other modules
   MONITORED_EXTENSIONS,

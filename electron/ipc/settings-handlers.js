@@ -124,27 +124,42 @@ function serviceConfigPath() {
 function registerWindowsService(db) {
   try {
     // Write the config that service-wrapper.js reads on startup
-    const monitoredPaths = JSON.parse(
-      getSetting(db, 'monitored_paths') || '[]'
-    );
+    const pathsRaw = getSetting(db, 'monitored_paths') || '[]';
+    let monitoredPaths = [];
+    try {
+      monitoredPaths = JSON.parse(pathsRaw);
+    } catch (_) {}
+    if (!Array.isArray(monitoredPaths) || monitoredPaths.length === 0) {
+      const monitorModule = require('../../monitor/monitor');
+      monitoredPaths = monitorModule.getDefaultMonitoredPaths();
+    }
+
     const config = {
+      watchPaths: monitoredPaths,
       monitoredPaths,
+      realtimeProtection: true,
       registeredAt: new Date().toISOString(),
     };
     
     const appDataDir = resolveAppDataDir();
+    const programDataDir = path.join(process.env.ProgramData || 'C:\\ProgramData', 'GSMShieldAV');
     
     // Ensure directory exists (with better error handling)
     try {
       if (!fs.existsSync(appDataDir)) {
         fs.mkdirSync(appDataDir, { recursive: true });
       }
+      if (!fs.existsSync(programDataDir)) {
+        fs.mkdirSync(programDataDir, { recursive: true });
+      }
     } catch (mkdirErr) {
-      console.error('[settings-handlers] Failed to create AppData directory:', mkdirErr);
-      throw new Error(`Cannot create directory ${appDataDir}: ${mkdirErr.message}`);
+      console.error('[settings-handlers] Failed to create AppData/ProgramData directory:', mkdirErr);
     }
     
     fs.writeFileSync(serviceConfigPath(), JSON.stringify(config, null, 2), 'utf8');
+    try {
+      fs.writeFileSync(path.join(programDataDir, 'service-config.json'), JSON.stringify(config, null, 2), 'utf8');
+    } catch (_) {}
 
     // Lazy require — node-windows may not be installed in dev environment
     let NodeWindows;
@@ -354,6 +369,9 @@ function register(ipcMain, { getDb, getMainWindow, getMonitor, getUpdater }) {
             if (!Array.isArray(monitoredPaths)) monitoredPaths = [];
           } catch (_) {
             monitoredPaths = [];
+          }
+          if (monitoredPaths.length === 0) {
+            monitoredPaths = monitorModule.getDefaultMonitoredPaths();
           }
           
           // Start the monitor

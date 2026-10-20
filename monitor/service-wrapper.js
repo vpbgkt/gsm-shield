@@ -29,7 +29,7 @@ const os   = require('os');
 /**
  * Resolve the AppData/GSMShieldAV directory without depending on Electron.
  * Uses process.env.APPDATA when available (Windows service environment), falls
- * back to the OS home-based roaming path.
+ * back to the OS home-based roaming path, and checks ProgramData.
  */
 function resolveAppDataDir() {
   const base =
@@ -39,7 +39,9 @@ function resolveAppDataDir() {
 }
 
 const APP_DATA_DIR     = resolveAppDataDir();
+const PROGRAM_DATA_DIR = path.join(process.env.ProgramData || 'C:\\ProgramData', 'GSMShieldAV');
 const CONFIG_PATH      = path.join(APP_DATA_DIR, 'service-config.json');
+const PROGRAM_CONFIG_PATH = path.join(PROGRAM_DATA_DIR, 'service-config.json');
 const THREAT_LOG_PATH  = path.join(APP_DATA_DIR, 'threat-events.json');
 const SERVICE_LOG_PATH = path.join(APP_DATA_DIR, 'service.log');
 
@@ -118,16 +120,29 @@ function appendThreatEvent({ filePath, threatName }) {
  */
 function readConfig() {
   try {
-    if (!fs.existsSync(CONFIG_PATH)) {
-      log('service-config.json not found — exiting cleanly.');
-      return null;
+    let targetPath = null;
+    if (fs.existsSync(CONFIG_PATH)) {
+      targetPath = CONFIG_PATH;
+    } else if (fs.existsSync(PROGRAM_CONFIG_PATH)) {
+      targetPath = PROGRAM_CONFIG_PATH;
     }
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+
+    if (!targetPath) {
+      log('service-config.json not found in AppData or ProgramData — using default configuration.');
+      return {
+        realtimeProtection: true,
+        watchPaths: [],
+      };
+    }
+    const raw = fs.readFileSync(targetPath, 'utf8');
     const cfg = JSON.parse(raw);
     return cfg;
   } catch (err) {
-    log(`Failed to read service-config.json: ${err.message} — exiting cleanly.`);
-    return null;
+    log(`Failed to read service-config.json: ${err.message} — using default configuration.`);
+    return {
+      realtimeProtection: true,
+      watchPaths: [],
+    };
   }
 }
 
@@ -213,16 +228,23 @@ function main() {
     process.exit(0);
   }
 
-  const watchPaths = Array.isArray(config.watchPaths) ? config.watchPaths : [];
+  const rawPaths = config.watchPaths || config.monitoredPaths || [];
+  let watchPaths = Array.isArray(rawPaths) ? rawPaths : [];
+
+  const monitor = loadMonitor();
 
   if (watchPaths.length === 0) {
-    log('No watch paths configured — service exiting cleanly.');
+    if (typeof monitor.getDefaultMonitoredPaths === 'function') {
+      watchPaths = monitor.getDefaultMonitoredPaths();
+    }
+  }
+
+  if (watchPaths.length === 0) {
+    log('No watch paths could be resolved — service exiting.');
     process.exit(0);
   }
 
   log(`Starting monitor on ${watchPaths.length} path(s): ${watchPaths.join(', ')}`);
-
-  const monitor = loadMonitor();
 
   // Start the real-time monitor (Requirement 11.1, 10.1–10.7)
   const watcher = monitor.startMonitor(watchPaths, {

@@ -48,18 +48,37 @@ function resolveAppDataDir() {
 }
 
 /**
+ * Return default user paths to monitor (Downloads & Desktop).
+ * @returns {string[]}
+ */
+function getDefaultMonitoredPaths() {
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, 'Downloads'),
+    path.join(home, 'Desktop'),
+  ];
+  const valid = [];
+  for (const c of candidates) {
+    try {
+      if (fs.existsSync(c)) valid.push(c);
+    } catch (_) {}
+  }
+  return valid;
+}
+
+/**
  * Default settings rows seeded on first creation of the settings table.
  * Values are stored as TEXT; booleans are '0'/'1' strings.
  */
 const SETTINGS_DEFAULTS = [
-  { key: 'realtime_protection',   value: '1' },
-  { key: 'auto_quarantine',       value: '1' },
-  { key: 'start_with_windows',    value: '0' },
-  { key: 'telemetry_enabled',     value: '1' },
-  { key: 'last_sync_at',          value: '' },
-  { key: 'first_run_complete',    value: '0' },
-  { key: 'monitored_paths',       value: '[]' },
-  { key: 'definition_version',    value: '' },
+  { key: 'realtime_protection',    value: '1' },
+  { key: 'auto_quarantine',        value: '1' },
+  { key: 'start_with_windows',     value: '1' },
+  { key: 'telemetry_enabled',      value: '1' },
+  { key: 'last_sync_at',           value: '' },
+  { key: 'first_run_complete',     value: '0' },
+  { key: 'monitored_paths',        value: JSON.stringify(getDefaultMonitoredPaths()) },
+  { key: 'definition_version',     value: '' },
   { key: 'last_definition_update', value: '' },
 ];
 
@@ -235,19 +254,28 @@ function runMigrations(db) {
  */
 function seedSettingsDefaults(db) {
   const count = db.prepare('SELECT COUNT(*) AS cnt FROM settings').get().cnt;
-  if (count > 0) return; // Already seeded — do not duplicate
+  if (count === 0) {
+    const insert = db.prepare(
+      'INSERT INTO settings (key, value) VALUES (@key, @value)'
+    );
 
-  const insert = db.prepare(
-    'INSERT INTO settings (key, value) VALUES (@key, @value)'
-  );
+    const seedAll = db.transaction((rows) => {
+      for (const row of rows) {
+        insert.run(row);
+      }
+    });
 
-  const seedAll = db.transaction((rows) => {
-    for (const row of rows) {
-      insert.run(row);
-    }
-  });
-
-  seedAll(SETTINGS_DEFAULTS);
+    seedAll(SETTINGS_DEFAULTS);
+  } else {
+    // If an existing DB has empty monitored_paths ('[]'), migrate it to include Downloads & Desktop
+    try {
+      const row = db.prepare("SELECT value FROM settings WHERE key = 'monitored_paths'").get();
+      if (!row || !row.value || row.value === '[]' || row.value === '') {
+        const defaultPaths = JSON.stringify(getDefaultMonitoredPaths());
+        db.prepare("UPDATE settings SET value = ? WHERE key = 'monitored_paths'").run(defaultPaths);
+      }
+    } catch (_) {}
+  }
 }
 
 /**
