@@ -6,6 +6,7 @@
 |---|---|
 | [EXPIRO_INCIDENT_2026-10-22.md](EXPIRO_INCIDENT_2026-10-22.md) | What happened, root cause, confirmed facts vs hypotheses, timeline, current infected inventory |
 | [EXPIRO_TECHNICAL_REFERENCE.md](EXPIRO_TECHNICAL_REFERENCE.md) | How Expiro really infects files (validated on exact clean/infected pairs), persistence, reinfection paths, sources |
+| [AFTER_RESET_CHECKLIST.md](AFTER_RESET_CHECKLIST.md) | **Start here after a clean Windows reinstall** — reservoirs to purge first, verified download hashes, no-dependency verification |
 | [DISINFECTION_PROCEDURE.md](DISINFECTION_PROCEDURE.md) | Safe step-by-step remediation (admin/reboot steps marked) and verification criteria |
 | [INVESTIGATION_CHECKLIST.md](INVESTIGATION_CHECKLIST.md) | Evidence-first checklist, with what is done and what still needs admin |
 | [AV_CHANGES_2026-10-22.md](AV_CHANGES_2026-10-22.md) | GSM Shield code changes, tests, false-positive risks, limitations |
