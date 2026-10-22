@@ -18,6 +18,8 @@ const path = require('path');
 const { analyzeExpiroStructure } = require('../../engine/expiro-structural');
 
 const EXTS = new Set(['.exe', '.dll', '.scr', '.com', '.cpl', '.ocx', '.sys', '.tmp', '.efi']);
+// Always-locked OS pseudo-files: not PE images, never Expiro; skip to keep "unreadable" meaningful.
+const SKIP_NAMES = new Set(['pagefile.sys', 'swapfile.sys', 'hiberfil.sys', 'dumpstack.log.tmp', 'dumpstack.log']);
 const args = process.argv.slice(2);
 const roots = args.filter((a) => !a.startsWith('--'));
 const csvArg = args.find((a) => a.startsWith('--csv='));
@@ -40,9 +42,18 @@ function walk(dir) {
     if (e.isDirectory()) { walk(full); continue; }
     if (!e.isFile()) continue;
     if (!allPe && !EXTS.has(path.extname(e.name).toLowerCase())) continue;
+    if (SKIP_NAMES.has(e.name.toLowerCase())) continue;
     counts.files++;
     const r = analyzeExpiroStructure(full);
-    if (!r.isPE) { if (r.verdict === 'error') counts.error++; continue; }
+    if (!r.isPE) {
+      if (r.verdict === 'error') {
+        // Never hide unreadable files: an AV that already detected a file blocks reads.
+        counts.error++;
+        const why = /virus|unwanted/i.test(r.error || '') ? 'blocked by antivirus (already detected)' : (r.error || 'unreadable');
+        rows.push({ verdict: 'unreadable', score: 0, file: full, last: '', lastRaw: '', indicators: why, family: '' });
+      }
+      continue;
+    }
     counts.pe++;
     counts[r.verdict]++;
     if (r.verdict !== 'clean') {

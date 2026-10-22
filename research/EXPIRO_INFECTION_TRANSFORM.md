@@ -55,7 +55,11 @@ it. GSM Shield therefore does not attempt in-place repair. This is now backed by
 evidence from two independent builds, not by assumption.
 
 ### Reproduce
+The preserved infected `.exe.infected` samples were deleted from this machine on 2026-10-23 after
+analysis (live malware removed from a production PC; their SHA-256 hashes are retained in
+`research/samples/infected/repo-clamav-2026-10-19/HASHES.csv`). To reproduce on a dedicated analysis
+VM, obtain an Expiro-infected PE and its exact clean build and run:
 ```
-node research/tools/expiro-diff.js assets/clamav/clamscan.exe research/samples/infected/repo-clamav-2026-10-19/clamscan.exe.infected
+node research/tools/expiro-diff.js <clean.exe> <infected.bin>
 ```
-(any of the five preserved pairs gives the same result).
+The two pairs measured here (clamscan, clamd) both gave the result above.

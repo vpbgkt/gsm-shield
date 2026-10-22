@@ -29,7 +29,22 @@ $src = @'
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+public static class StructScanFs {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  struct WIN32_FIND_DATAW { public uint dwFileAttributes; public long ftCreation, ftAccess, ftWrite; public uint nFileSizeHigh, nFileSizeLow, dwReserved0, dwReserved1;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string cFileName; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string cAlternateFileName; }
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr FindFirstFileW(string name, out WIN32_FIND_DATAW data);
+  [DllImport("kernel32.dll")] static extern bool FindClose(IntPtr h);
+  // Skip only junctions/mount points and symlinks; scan OneDrive cloud placeholders and other reparse folders.
+  public static bool IsLinkLike(string path) {
+    WIN32_FIND_DATAW d; IntPtr h = FindFirstFileW(path.TrimEnd('\\'), out d);
+    if (h == new IntPtr(-1)) return false; FindClose(h);
+    if ((d.dwFileAttributes & 0x400) == 0) return false;
+    return d.dwReserved0 == 0xA0000003u || d.dwReserved0 == 0xA000000Cu;
+  }
+}
 public class StructResult { public string Path; public bool IsPE; public int Score; public string Verdict; public string Last; public uint LastRaw; public string Indicators; public bool Is64; public string Error; }
 public static class ExpiroStruct {
   static readonly HashSet<string> Data = new HashSet<string>(new[]{".reloc",".rsrc",".debug",".data",".rdata",".pdata",".xdata",".idata",".edata",".tls",".bss",".didat","_RDATA",".fptable",".gfids",".00cfg",".CRT",".buildid",".symtab"});
@@ -85,6 +100,7 @@ public static class ExpiroStruct {
 if (-not ('ExpiroStruct' -as [type])) { Add-Type -TypeDefinition $src -Language CSharp }
 
 $exts = @('.exe','.dll','.scr','.com','.cpl','.ocx','.sys','.tmp','.efi')
+$skipNames = @('pagefile.sys','swapfile.sys','hiberfil.sys','dumpstack.log.tmp','dumpstack.log')
 $stats = @{ files = 0; pe = 0; clean = 0; suspicious = 0; infected = 0; error = 0; dirErrors = 0 }
 $rows = New-Object System.Collections.Generic.List[object]
 function Walk([string]$dir) {
@@ -92,15 +108,23 @@ function Walk([string]$dir) {
   try {
     foreach ($f in $files) {
       if (-not $AllFiles -and $exts -notcontains [IO.Path]::GetExtension($f).ToLowerInvariant()) { continue }
+      if ($skipNames -contains [IO.Path]::GetFileName($f).ToLowerInvariant()) { continue }
       $script:stats.files++
       $r = [ExpiroStruct]::Check($f)
-      if (-not $r.IsPE) { if ($r.Verdict -eq 'error') { $script:stats.error++ }; continue }
+      if (-not $r.IsPE) {
+        if ($r.Verdict -eq 'error') {
+          $script:stats.error++
+          $why = if ($r.Error -match 'virus|unwanted') { 'blocked by antivirus (already detected)' } else { $r.Error }
+          $rows.Add([pscustomobject]@{ Verdict = 'unreadable'; Score = 0; Last = ''; LastRaw = ''; Indicators = $why; Path = $f })
+        }
+        continue
+      }
       $script:stats.pe++; $script:stats[$r.Verdict]++
       if ($r.Verdict -ne 'clean') { $rows.Add([pscustomobject]@{ Verdict = $r.Verdict; Score = $r.Score; Last = $r.Last; LastRaw = ('0x{0:X}' -f $r.LastRaw); Indicators = $r.Indicators; Path = $f }) }
     }
   } catch { $script:stats.dirErrors++ }
   try { $dirs = [IO.Directory]::EnumerateDirectories($dir) } catch { $script:stats.dirErrors++; return }
-  foreach ($d in $dirs) { try { if (([IO.File]::GetAttributes($d) -band [IO.FileAttributes]::ReparsePoint) -eq 0) { Walk $d } } catch { $script:stats.dirErrors++ } }
+  foreach ($d in $dirs) { try { if (-not [StructScanFs]::IsLinkLike($d)) { Walk $d } } catch { $script:stats.dirErrors++ } }
 }
 $t0 = Get-Date
 foreach ($root in $Roots) { if (Test-Path -LiteralPath $root -PathType Leaf) { $r = [ExpiroStruct]::Check($root); $rows.Add([pscustomobject]@{ Verdict = $r.Verdict; Score = $r.Score; Last = $r.Last; LastRaw = ('0x{0:X}' -f $r.LastRaw); Indicators = $r.Indicators; Path = $root }) } else { Walk $root } }

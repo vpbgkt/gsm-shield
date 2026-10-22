@@ -65,7 +65,24 @@ $core = @'
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+public static class ErFs {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  struct WIN32_FIND_DATAW { public uint dwFileAttributes; public long ftCreation, ftAccess, ftWrite; public uint nFileSizeHigh, nFileSizeLow, dwReserved0, dwReserved1;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string cFileName; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string cAlternateFileName; }
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr FindFirstFileW(string name, out WIN32_FIND_DATAW data);
+  [DllImport("kernel32.dll")] static extern bool FindClose(IntPtr h);
+  // Reparse tag of a path (0 when it is not a reparse point).
+  public static uint ReparseTag(string path) {
+    WIN32_FIND_DATAW d; IntPtr h = FindFirstFileW(path.TrimEnd('\\'), out d);
+    if (h == new IntPtr(-1)) return 0; FindClose(h);
+    return (d.dwFileAttributes & 0x400) != 0 ? d.dwReserved0 : 0;
+  }
+  // Only junctions/mount points and symlinks are skipped (loop safety). Cloud placeholders
+  // (OneDrive Files On-Demand, tag 0x9000xxxA) and other reparse folders ARE scanned.
+  public static bool IsLinkLike(string path) { uint t = ReparseTag(path); return t == 0xA0000003u || t == 0xA000000Cu; }
+}
 public class ErResult { public string Path; public bool IsPE; public int Score; public string Verdict; public string Last; public uint LastRaw; public string Indicators; public bool Is64; public string Error; }
 public static class ExpiroRemoverCore {
   static readonly HashSet<string> Data = new HashSet<string>(new[]{".reloc",".rsrc",".debug",".data",".rdata",".pdata",".xdata",".idata",".edata",".tls",".bss",".didat","_RDATA",".fptable",".gfids",".00cfg",".CRT",".buildid",".symtab"});
@@ -138,6 +155,8 @@ if (-not ('ExpiroRemoverCore' -as [type])) { Add-Type -TypeDefinition $core -Lan
 # ----------------------------------------------------------------------------------------------
 $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $Exts = @('.exe', '.scr', '.com', '.cpl', '.tmp', '.dll', '.ocx', '.sys', '.efi')
+# Always-locked OS pseudo-files (not PE, never Expiro): skip so "unreadable" means AV-blocked.
+$SkipNames = @('pagefile.sys', 'swapfile.sys', 'hiberfil.sys', 'dumpstack.log.tmp', 'dumpstack.log')
 $win = $env:SystemRoot
 $Protected = @("$win\System32", "$win\SysWOW64", "$win\WinSxS", "$win\servicing", "$win\SystemApps", "$env:ProgramFiles\WindowsApps", "$env:ProgramFiles\Windows Defender", "${env:ProgramFiles(x86)}\Windows Defender", "$env:ProgramData\Microsoft\Windows Defender") | ForEach-Object { $_.TrimEnd('\').ToLowerInvariant() + '\' }
 $NormallyNotAuto = @('ssh-agent', 'perceptionsimulation', 'midisrv', 'refsdedupsvc', 'perfhost', 'comsysapp', 'sensordataservice', 'wmpnetworksvc', 'alg', 'msdtc')
@@ -194,24 +213,34 @@ function Add-Finding($type, $path, $r, $extra) {
   $findings.Add([pscustomobject]@{ Type = $type; Verdict = $r.Verdict; Score = $r.Score; Indicators = $r.Indicators; Last = $r.Last; Path = $path; Detail = $extra; Protected = (Test-Protected $path) })
 }
 
-$stats = @{ files = 0; pe = 0; unreadableDirs = 0 }
+$stats = @{ files = 0; pe = 0; unreadableDirs = 0; unreadableFiles = 0 }
 if (-not $SkipFiles) {
   function Walk([string]$dir) {
     try { $files = [IO.Directory]::EnumerateFiles($dir) } catch { $script:stats.unreadableDirs++; return }
     try {
       foreach ($f in $files) {
         if ($Exts -notcontains [IO.Path]::GetExtension($f).ToLowerInvariant()) { continue }
+        if ($SkipNames -contains [IO.Path]::GetFileName($f).ToLowerInvariant()) { continue }
         $script:stats.files++
         $r = Get-Structure $f
         if ($r.IsPE) { $script:stats.pe++ }
         if ($r.Verdict -eq 'infected' -or $r.Verdict -eq 'suspicious') { Add-Finding 'file' $f $r '' }
+        elseif ($r.Verdict -eq 'error') {
+          # A file we cannot read is reported, never silently skipped: an antivirus that has
+          # already detected it blocks reads ("contains a virus"), so it is a lead, not noise.
+          $script:stats.unreadableFiles++
+          $why = if ($r.Error -match 'virus|unwanted') { 'blocked by antivirus (already detected)' } else { $r.Error }
+          $findings.Add([pscustomobject]@{ Type = 'unreadable'; Verdict = 'unknown'; Score = 0; Indicators = ''; Last = ''; Path = $f; Detail = $why; Protected = (Test-Protected $f) })
+        }
       }
     } catch { $script:stats.unreadableDirs++ }
     try { $dirs = [IO.Directory]::EnumerateDirectories($dir) } catch { $script:stats.unreadableDirs++; return }
-    foreach ($d in $dirs) { try { if (([IO.File]::GetAttributes($d) -band [IO.FileAttributes]::ReparsePoint) -eq 0) { Walk $d } } catch { $script:stats.unreadableDirs++ } }
+    # Descend into every folder except junctions/symlinks. Earlier versions skipped ALL reparse
+    # points, which silently excluded OneDrive (its folders are cloud reparse points).
+    foreach ($d in $dirs) { try { if (-not [ErFs]::IsLinkLike($d)) { Walk $d } } catch { $script:stats.unreadableDirs++ } }
   }
   foreach ($root in $Roots) { Log "scanning $root"; Walk $root }
-  Log ("files checked={0} pe={1} unreadable folders={2}" -f $stats.files, $stats.pe, $stats.unreadableDirs)
+  Log ("files checked={0} pe={1} unreadable files={2} unreadable folders={3}" -f $stats.files, $stats.pe, $stats.unreadableFiles, $stats.unreadableDirs)
 }
 
 $procInfected = @()
@@ -263,9 +292,10 @@ foreach ($pr in $profiles) {
 
 $findings | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $ReportDir 'findings.csv')
 $infectedFiles = @($findings | Where-Object { ($_.Type -eq 'file' -or $_.Type -eq 'ioc') -and $_.Verdict -eq 'infected' } | Sort-Object Path -Unique)
-Log ("RESULT: infected files={0} (protected={1}), suspicious={2}, infected processes={3}, infected services={4}, IOC files={5}" -f `
+Log ("RESULT: infected files={0} (protected={1}), suspicious={2}, infected processes={3}, infected services={4}, IOC files={5}, unreadable files={6}" -f `
   @($infectedFiles | Where-Object Type -eq 'file').Count, @($infectedFiles | Where-Object Protected).Count, @($findings | Where-Object { $_.Verdict -eq 'suspicious' }).Count,
-  $procInfected.Count, $svcInfected.Count, @($findings | Where-Object Type -eq 'ioc').Count)
+  $procInfected.Count, $svcInfected.Count, @($findings | Where-Object Type -eq 'ioc').Count, @($findings | Where-Object Type -eq 'unreadable').Count)
+foreach ($u in @($findings | Where-Object Type -eq 'unreadable')) { Log "  UNREADABLE: $($u.Path) - $($u.Detail)" }
 
 if ($Mode -eq 'Scan' -or $Mode -eq 'Verify') {
   Log "Report: $ReportDir"
