@@ -13,11 +13,23 @@ system drive** and get re-introduced. To stop the cycle, those reservoirs must b
 | # | Reservoir | What is infected | Status after this session |
 |---|---|---|---|
 | R1 | **OneDrive cloud** (`OneDrive\Desktop\workspace`, `workspace-master`) | cracked GSM tools: `adb.exe`, `fastboot.exe`, `frp.exe`, `FalconFRPTool_V1.0.0.1.exe`, `Tecno Infinix Itel Fastboot Info Read.exe`, `nodemon\bin\windows-kill.exe` | local working-tree copies restored from clean git history or removed by Defender; **cloud copies still infected and will re-sync** |
-| R2 | **GitHub `vpbgkt/workspace`** | committed history contains an infected `node_modules/nodemon/bin/windows-kill.exe` (tracked blob is the virus); the adb/fastboot/Tecno blobs in history are clean | **not yet cleaned** — needs history rewrite or file removal |
-| R3 | **GitHub `vpbgkt/gsm-shield`** | five infected ClamAV `.exe` in commits `88d29a0`/`3c6179c` | HEAD fixed (commits `56b089b`, `f9bc90d`); **old blobs remain in history** |
+| R2 | **GitHub `vpbgkt/workspace`** (private) | 1 infected blob in history only: `node_modules/nodemon/bin/windows-kill.exe` (sha `9aedab5c3c…`). **HEAD is clean** — a fresh clone's working tree has no infected file. | left as-is per user decision 2026-10-23; safe to clone |
+| R3 | **GitHub `vpbgkt/gsm-shield`** | 5 infected ClamAV `.exe` blobs in history only (shas `799b2188…`, `8eb068e2…`, `61a34800…`, `97e16e25…`, `d6f49f9d…`, from commit `88d29a0`). **HEAD is clean** (fixed in `56b089b`/`f9bc90d`/`2c7ce32`). | left as-is per user decision; safe to clone |
+| R3b | **GitHub `vpbgkt/Perfect-Download-Manager`** | **no executables at all** across all 6 branches | clean, nothing to do |
 | R4 | **Windows install USB (E:)** | infected setup files + Intel RST driver package | re-create the USB on a clean PC; do not reuse |
 | R5 | **D: archives / backups** | `D:\Trash\update136.tar` (>=282 infected entries), executables in `D:\Trash\21octResetBackup`, old `$RECYCLE.BIN` | delete or keep offline; never extract-and-run |
 | R6 | **Cracked / unofficial GSM tools** (the likely original vector) | FRP bypass and flashing tools from unofficial sources | replace with vendor tools; treat all such downloads as untrusted |
+
+### GitHub repo scan (2026-10-23)
+
+Scanned with `research/tools/scan-github-repo.js` (public API, HEAD of every branch) and
+`research/tools/scan-git-history.js` (every PE blob across all local history). Result: **all three
+repos are safe to clone** — every repo's current HEAD contains zero infected executables, so a fresh
+`git clone` never places an infected file in the working tree. Infected material exists only as
+dormant historical blobs that a normal checkout does not materialize. The user chose to leave the
+history as-is rather than rewrite and force-push. To erase the dormant blobs later: install
+`git filter-repo` and run `git filter-repo --strip-blobs-with-ids <file-of-shas>` on a mirror clone,
+then force-push (irreversible; rewrites all commit IDs).
 
 ## The mechanism of "reinfection"
 
