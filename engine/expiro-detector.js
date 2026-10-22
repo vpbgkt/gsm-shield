@@ -9,12 +9,25 @@
  * v2.0 — Improved heuristics, reduced false positives (UPX, overlay analysis),
  *         added PE checksum validation, timestamp anomaly detection, and
  *         import-table injection-API analysis.
+ *
+ * v3.0 (2026-10-22) — Structural layer (engine/expiro-structural.js) is now the
+ *         PRIMARY signal. It is derived from real infected samples and verified
+ *         against exact clean/infected pairs. The v2 heuristics below were never
+ *         validated against a real sample (they score real Expiro at 0) and are
+ *         kept only as a secondary layer; they can no longer veto a structural
+ *         detection. See research/EXPIRO_INCIDENT_2026-10-22.md.
  */
 
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
+const { analyzeExpiroStructure } = require('./expiro-structural');
+
+/** Extensions the structural layer inspects (cheap: header + bounded reads). */
+const STRUCTURAL_EXTENSIONS = ['.exe', '.dll', '.scr', '.com', '.cpl', '.ocx', '.sys', '.tmp', '.efi'];
+/** Extensions the legacy v2 heuristics inspect (unchanged from v2). */
+const LEGACY_EXTENSIONS = ['.exe', '.dll', '.scr'];
 
 /**
  * Expiro Detection Signatures and Heuristics
@@ -388,11 +401,65 @@ function parsePEHeader(filePath) {
 }
 
 /**
- * Detect Expiro infection using multi-layered heuristics
+ * Detect Expiro infection.
+ *
+ * Layer 1 (primary): structural Expiro layout (expiro-structural.js).
+ * Layer 2 (secondary): legacy v2 heuristics (unvalidated, kept for continuity).
+ *
+ * A structural "infected" verdict always wins and cannot be discounted by the
+ * legacy packer / Authenticode overrides. A structural "suspicious" verdict is
+ * reported in the reasons but is capped below the detection threshold.
+ *
  * @param {string} filePath - Path to file to scan
  * @returns {Object} Detection result with confidence score and reasons
  */
 function detectExpiroInfection(filePath) {
+  const ext = path.extname(String(filePath || '')).toLowerCase();
+
+  let structural = null;
+  if (STRUCTURAL_EXTENSIONS.includes(ext)) {
+    structural = analyzeExpiroStructure(filePath);
+  }
+
+  const result = LEGACY_EXTENSIONS.includes(ext)
+    ? detectLegacyHeuristics(filePath)
+    : { isInfected: false, confidence: 0, reasons: [], threatName: 'Virus:Win32/Expiro.EK!MTB', filePath };
+
+  if (structural && structural.isPE) {
+    result.structural = {
+      verdict: structural.verdict,
+      score: structural.score,
+      indicators: structural.indicators,
+      layout: structural.layout,
+    };
+    const structReasons = structural.indicators.map((i) => `[structural] ${i.detail}`);
+    if (structural.verdict === 'infected') {
+      result.isInfected = true;
+      result.confidence = Math.max(result.confidence, structural.score);
+      result.threatName = structural.threatName;
+      result.detectionLayer = 'structural';
+      // Drop legacy "verified benign" notes that contradict a structural hit.
+      result.reasons = structReasons.concat(result.reasons.filter((r) => !/benign packer verified/i.test(r)));
+      result.recommendation = 'Do not run this file. Quarantine it and replace it with a clean copy from the vendor (or SFC/DISM for Windows files). In-place repair is not supported for Expiro.';
+    } else if (structural.verdict === 'suspicious') {
+      // A suspicious structure may raise confidence, but never to the
+      // detection threshold on its own, and never lowers a legacy score.
+      const capped = Math.min(EXPIRO_SIGNATURES.detectionThreshold - 1, structural.score);
+      result.confidence = Math.max(result.confidence, capped);
+      result.reasons = structReasons.concat(result.reasons);
+      if (!result.isInfected) result.detectionLayer = 'structural-suspicious';
+    }
+  }
+  return result;
+}
+
+/**
+ * Legacy v2 multi-layered heuristics (unchanged logic, renamed).
+ * NOTE: not validated against real Expiro samples; see header comment.
+ * @param {string} filePath - Path to file to scan
+ * @returns {Object} Detection result with confidence score and reasons
+ */
+function detectLegacyHeuristics(filePath) {
   const result = {
     isInfected: false,
     confidence: 0,
@@ -400,11 +467,10 @@ function detectExpiroInfection(filePath) {
     threatName: 'Virus:Win32/Expiro.EK!MTB',
     filePath,
   };
-  
+
   try {
-    // Only scan user-mode PE files (Expiro is a Win32 user-mode PE infector, does not infect .sys kernel drivers)
     const ext = path.extname(filePath).toLowerCase();
-    if (!['.exe', '.dll', '.scr'].includes(ext)) {
+    if (!LEGACY_EXTENSIONS.includes(ext)) {
       return result;
     }
     
@@ -700,7 +766,9 @@ async function scanFiles(filePaths, onProgress, options = {}) {
 
 module.exports = {
   detectExpiroInfection,
+  detectLegacyHeuristics,
   scanFile,
   scanFiles,
   EXPIRO_SIGNATURES,
+  STRUCTURAL_EXTENSIONS,
 };

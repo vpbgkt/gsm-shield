@@ -18,6 +18,9 @@ const path = require('path');
 const ExpiroPrevention = require('../engine/expiro-prevention');
 const ExpiroDisinfector = require('../engine/expiro-disinfector');
 
+/** PE-capable extensions watched in real time (Expiro targets .exe; others are cheap to check). */
+const WATCHED_EXTENSIONS = ['.exe', '.dll', '.scr', '.com', '.cpl', '.tmp'];
+
 class ExpiroMonitor {
   constructor(quarantineModule, mainWindow) {
     this.quarantineModule = quarantineModule;
@@ -123,7 +126,11 @@ class ExpiroMonitor {
         stabilityThreshold: 2000,  // Wait 2s after write completes
         pollInterval: 100,
       },
-      // Exclude heavy system directories, build caches, and non-PE files
+      // Exclude heavy system directories, build caches, and non-PE files.
+      // NOTE: %LOCALAPPDATA%\Temp is deliberately NOT excluded any more: browser
+      // downloads (Edge uses Temp\MicrosoftEdgeDownloads), installer payloads and
+      // uninstaller copies land there, and infected files were found there in the
+      // 2026-10-22 incident. The structural check reads only headers, so it is cheap.
       ignored: (filePath, stats) => {
         const lower = filePath.toLowerCase();
         if (lower.includes('$recycle.bin') ||
@@ -132,7 +139,6 @@ class ExpiroMonitor {
             lower.includes('\\servicing') ||
             lower.includes('\\node_modules') ||
             lower.includes('\\.git') ||
-            lower.includes('\\appdata\\local\\temp') ||
             lower.includes('\\inetcache') ||
             lower.includes('\\gsmshield\\quarantine') ||
             lower.includes('\\gsmshieldav\\quarantine') ||
@@ -141,9 +147,9 @@ class ExpiroMonitor {
         }
         // Always allow eligible directories so chokidar can descend into them
         if (!stats || stats.isDirectory()) return false;
-        // For files, only watch PE executables
+        // For files, only watch PE-capable extensions
         const ext = path.extname(filePath).toLowerCase();
-        return !['.exe', '.dll', '.scr'].includes(ext);
+        return !WATCHED_EXTENSIONS.includes(ext);
       },
     });
     

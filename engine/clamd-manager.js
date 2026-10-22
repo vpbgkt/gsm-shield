@@ -152,6 +152,12 @@ async function start() {
       console.error('[clamd] clamd.exe not found at', exe);
       return false;
     }
+    // Refuse to start a tampered/infected daemon (it would run elevated).
+    const integrity = require('./binary-integrity').verifyExecutable(exe);
+    if (!integrity.ok) {
+      console.error('[clamd] refusing to start clamd.exe:', integrity.reason);
+      return false;
+    }
 
     let cfg;
     try {

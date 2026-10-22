@@ -65,6 +65,14 @@ async function updateDefinitions({ onProgress } = {}) {
   let childProcess = null;
 
   return new Promise((resolve) => {
+    // Refuse to run a tampered/infected freshclam.exe (see engine/binary-integrity.js)
+    const integrity = require('./binary-integrity').verifyExecutable(freshclamPath);
+    if (!integrity.ok) {
+      console.error(`[updater] Refusing to start freshclam.exe: ${integrity.reason}`);
+      resolve({ success: false, integrityFailure: true, error: `freshclam.exe failed integrity check: ${integrity.reason}` });
+      return;
+    }
+
     // Spawn freshclam.exe with required arguments
     // --stdout: Print to stdout instead of stderr
     // --datadir=<path>: Specify where to download definitions

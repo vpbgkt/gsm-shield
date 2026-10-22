@@ -16,9 +16,11 @@ const fc = require('fast-check');
 const { initDatabase, getDb, closeDatabase } = require('../database/init');
 const {
   QUARANTINE_DIR,
+  QUARANTINE_EXT,
   quarantineFile,
   restoreFile,
   deleteFile,
+  isNeutralized,
   OriginalPathMissingError,
 } = require('./quarantine');
 
@@ -83,7 +85,50 @@ describe('engine/quarantine', () => {
       // Assert: file should exist in quarantine directory
       const files = fs.readdirSync(QUARANTINE_DIR);
       expect(files.length).toBe(1);
-      expect(files[0]).toMatch(/^[0-9a-f-]{36}_infected-file\.exe$/);
+      // Neutralized storage: non-executable extension appended
+      expect(files[0]).toMatch(/^[0-9a-f-]{36}_infected-file\.exe\.gsmq$/);
+      expect(QUARANTINE_EXT).toBe('.gsmq');
+    });
+
+    it('should store a neutralized copy that is not a runnable PE image', async () => {
+      // A fake PE (MZ header) to prove the stored bytes no longer start with MZ
+      const pe = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(510, 0x41)]);
+      fs.writeFileSync(testFile, pe);
+
+      const { quarantinePath } = await quarantineFile(testFile, 'Virus:Win64/Expiro (structural)');
+
+      const stored = fs.readFileSync(quarantinePath);
+      expect(isNeutralized(quarantinePath)).toBe(true);
+      expect(stored.subarray(0, 2).toString('latin1')).not.toBe('MZ');
+      expect(stored.includes(pe)).toBe(false);
+      expect(stored.length).toBe(pe.length + 8);
+    });
+
+    it('should restore a neutralized entry byte-for-byte', async () => {
+      const original = Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0xff, 0x00, 0xa5, 0x5a]);
+      fs.writeFileSync(testFile, original);
+      await quarantineFile(testFile, 'RoundTrip');
+      const id = getDb().prepare('SELECT id FROM quarantine').get().id;
+
+      await restoreFile(id);
+
+      expect(fs.readFileSync(testFile).equals(original)).toBe(true);
+    });
+
+    it('should still restore legacy raw quarantine entries', async () => {
+      // Simulate an entry written by the pre-neutralization version
+      fs.mkdirSync(QUARANTINE_DIR, { recursive: true });
+      const legacyPath = path.join(QUARANTINE_DIR, '00000000-0000-0000-0000-000000000000_legacy.exe');
+      fs.writeFileSync(legacyPath, 'legacy-raw-content');
+      const target = path.join(testDir, 'legacy.exe');
+      const info = getDb().prepare(
+        'INSERT INTO quarantine (original_path, quarantine_path, threat_name, file_hash, file_size) VALUES (?, ?, ?, ?, ?)'
+      ).run(target, legacyPath, 'Legacy', 'x'.repeat(64), 18);
+
+      await restoreFile(info.lastInsertRowid);
+
+      expect(fs.readFileSync(target, 'utf8')).toBe('legacy-raw-content');
+      expect(fs.existsSync(legacyPath)).toBe(false);
     });
 
     it('should record original_path, threat_name, and file_hash in quarantine table (Req 9.1)', async () => {

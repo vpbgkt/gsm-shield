@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-10-22).** This document predates the validated analysis. Its detection results and any "clean" conclusions relied on heuristics that score real Expiro infections at 0, and its advice to keep Windows Defender disabled is withdrawn. Read [EXPIRO_INCIDENT_2026-10-22.md](EXPIRO_INCIDENT_2026-10-22.md), [EXPIRO_TECHNICAL_REFERENCE.md](EXPIRO_TECHNICAL_REFERENCE.md) and [DISINFECTION_PROCEDURE.md](DISINFECTION_PROCEDURE.md) first.
+
 # PE Analysis Tools - Quick Reference Guide
 
 **Purpose:** Guide to tools for analyzing and disinfecting Win32/Expiro  

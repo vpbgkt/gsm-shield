@@ -233,12 +233,12 @@ const useExpiroStore = create((set, get) => {
         }
         const res = await window.electronAPI.expiroDisinfectFile({ filePath, detection });
         if (res && res.success && res.result?.success) {
+          // Expiro cannot be repaired in place; the only outcomes are a verified
+          // same-build replacement or neutralized quarantine + vendor reinstall.
           const actionText =
-            res.result?.action === 'surgically_disinfected'
-              ? 'Surgically disinfected — PE entry point & W^X permissions restored safely'
-              : res.result?.action === 'restored'
-              ? 'Restored from clean source backup'
-              : 'Safely isolated into quarantine';
+            res.result?.action === 'restored'
+              ? 'Replaced with a verified clean copy of the same build'
+              : 'Quarantined (neutralized, cannot run). Reinstall the application from the vendor';
 
           set((state) => ({
             detections: state.detections.filter((d) => d.filePath !== filePath),

@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const readline = require('readline');
+const { verifyExecutable } = require('./binary-integrity');
 
 /**
  * Resolve the path to clamscan.exe from the bundled resources directory
@@ -130,6 +131,23 @@ async function scan(targetPath, { onProgress, onThreat, signal, excludeDirs } = 
         for (const dir of excludeDirs) args.push('--exclude-dir=' + dir);
       }
       for (const t of targets) args.push(t);
+    }
+
+    // Never launch a bundled binary that fails the integrity/Expiro check
+    // (see engine/binary-integrity.js for why this exists).
+    const integrity = verifyExecutable(exe);
+    if (!integrity.ok) {
+      console.error(`[scanner] Refusing to start ${path.basename(exe)}: ${integrity.reason}`);
+      resolve({
+        filesScanned: 0,
+        threatsFound: 0,
+        duration: Date.now() - startTime,
+        cancelled: false,
+        error: true,
+        integrityFailure: true,
+        errorMessage: `Scanner binary failed integrity check: ${integrity.reason}. Reinstall GSM Shield from a verified build.`
+      });
+      return;
     }
 
     childProcess = spawn(exe, args, {

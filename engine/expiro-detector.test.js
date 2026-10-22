@@ -296,6 +296,46 @@ describe('Expiro Detector v2', () => {
       expect(result.confidence).toBe(0);
     });
 
+    test('v3: real Expiro layout is detected by the structural layer (legacy v2 scores it 0)', () => {
+      const { expiroInfected64 } = require('./__tests__/helpers/pe-builder');
+      const { detectLegacyHeuristics } = require('./expiro-detector');
+      const tempFile = path.join(tempDir, 'real-layout.exe');
+      fs.writeFileSync(tempFile, expiroInfected64());
+
+      expect(detectLegacyHeuristics(tempFile).isInfected).toBe(false);
+      const result = detectExpiroInfection(tempFile);
+      expect(result.isInfected).toBe(true);
+      expect(result.detectionLayer).toBe('structural');
+      expect(result.threatName).toMatch(/Expiro \(structural\)/);
+      expect(result.reasons[0]).toMatch(/^\[structural\]/);
+    });
+
+    test('v3: packer discount cannot veto a structural detection', () => {
+      const { buildPE, msvcStub64, SEC } = require('./__tests__/helpers/pe-builder');
+      const buf = buildPE({
+        sections: [
+          { name: '.text', characteristics: SEC.CODE, rawSize: 0x2000 },
+          { name: '.vmp0', characteristics: SEC.CODE, rawSize: 0x1000 },
+          { name: '.reloc', characteristics: SEC.RWX_DATA, rawSize: 0x40000 },
+        ],
+        relocDir: 'zero',
+        dllCharacteristics: 0x8120,
+        epBytes: ({ sections, entryRva }) => { const l = sections[2]; return msvcStub64(entryRva, l.virtualAddress + l.rawSize - 0x1000); },
+      });
+      const tempFile = path.join(tempDir, 'vmp-infected.exe');
+      fs.writeFileSync(tempFile, buf);
+      const result = detectExpiroInfection(tempFile);
+      expect(result.isInfected).toBe(true);
+      expect(result.reasons.some((r) => /benign packer verified/i.test(r))).toBe(false);
+    });
+
+    test('v3: .tmp files with the Expiro layout are checked (infected Inno Setup _unins.tmp seen in the wild)', () => {
+      const { expiroInfected64 } = require('./__tests__/helpers/pe-builder');
+      const tempFile = path.join(tempDir, '_unins.tmp');
+      fs.writeFileSync(tempFile, expiroInfected64());
+      expect(detectExpiroInfection(tempFile).isInfected).toBe(true);
+    });
+
     test('should flag file with many suspicious sections', () => {
       const sections = [];
       for (let i = 0; i < 10; i++) {

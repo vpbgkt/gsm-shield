@@ -1,9 +1,12 @@
 /**
  * research/tools/safe-restore-quarantine.js
  *
- * Safely analyzes all files in C:\GSMShield\Quarantine using the calibrated v2
- * Expiro heuristic detector and restores confirmed false-positives back to their
- * original installation paths.
+ * Analyzes all files in C:\GSMShield\Quarantine and restores files that are
+ * structurally clean (engine v3) back to their original installation paths.
+ *
+ * HISTORICAL NOTE: before 2026-10-22 this script relied on the v2 heuristics,
+ * which do not detect real Expiro. Any restore performed with that version
+ * must be treated as possibly having re-introduced infected files.
  *
  * Usage:
  *   node research/tools/safe-restore-quarantine.js --dry-run
@@ -84,12 +87,16 @@ async function run() {
       continue;
     }
 
-    // Run calibrated v2 Expiro detector
+    // Run the detector (v3: structural layer + legacy heuristics).
+    // WARNING (2026-10-22): the v2-only detector scored real Expiro infections
+    // at 0, so earlier runs of this script could restore INFECTED files as
+    // "false positives". A restore now requires an explicit structural
+    // verdict of 'clean' in addition to a low legacy score.
     const assessment = detectExpiroInfection(rec.quarantinePath);
     const confidence = assessment.confidence || 0;
+    const structurallyClean = !!(assessment.structural && assessment.structural.verdict === 'clean');
 
-    // Threshold is 60; anything < 50 is definitively benign
-    if (confidence < 50 && !assessment.isInfected) {
+    if (confidence < 50 && !assessment.isInfected && structurallyClean) {
       cleanCount++;
 
       if (!isDryRun) {

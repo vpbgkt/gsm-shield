@@ -125,8 +125,26 @@ function getIsccCmd() {
   return null;
 }
 
+/**
+ * Refuse to package if any bundled ClamAV executable is not byte-identical to
+ * the known-good manifest or shows the Expiro layout. On 2026-10-19 infected
+ * ClamAV executables were committed and every installer built afterwards
+ * shipped Expiro (research/EXPIRO_INCIDENT_2026-10-22.md).
+ */
+function verifyBundledBinaries() {
+  const { verifyManifestDirectory } = require('../engine/binary-integrity');
+  const dir = path.join(ROOT_DIR, 'assets', 'clamav');
+  const { ok, results } = verifyManifestDirectory(dir);
+  for (const r of results) console.log(`  ${r.ok ? 'OK  ' : 'FAIL'} ${r.file} — ${r.reason}`);
+  if (!ok) {
+    console.error('[BUILD ERROR] Bundled ClamAV binaries failed verification. Replace them from the official release and re-run.');
+    process.exit(1);
+  }
+}
+
 function stage2() {
   printHeader('Stage 2 — Package with electron-builder (Windows x64, unpacked dir)');
+  verifyBundledBinaries();
   run('npx electron-builder --win --x64 --dir');
 
   const unpackedDir = path.join(ROOT_DIR, 'dist', 'win-unpacked');
@@ -214,4 +232,4 @@ if (require.main === module) {
 }
 
 // Export stage functions for testing and programmatic use.
-module.exports = { stage1, stage2, stage3, isOnPath };
+module.exports = { stage1, stage2, stage3, isOnPath, verifyBundledBinaries };

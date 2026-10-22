@@ -71,9 +71,9 @@ class ExpiroPrevention extends EventEmitter {
     }
     
     try {
-      // Only scan PE files
+      // Only scan PE-capable files (same set the detector's structural layer handles)
       const ext = path.extname(filePath).toLowerCase();
-      if (!['.exe', '.dll', '.sys', '.scr'].includes(ext)) {
+      if (!expiroDetector.STRUCTURAL_EXTENSIONS.includes(ext)) {
         return { allowed: true, reason: 'Not executable' };
       }
       

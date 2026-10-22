@@ -1,3 +1,26 @@
+# READ FIRST — status as of 2026-10-22 18:30 IST
+
+**The machine is NOT clean. Expiro is active.** Everything below the line "HISTORICAL README" is the earlier project log; its "verified clean" / "0 infections" / "100% detection" statements are **invalid** because the v2 heuristics score real Expiro infections at 0.
+
+| Document | Purpose |
+|---|---|
+| [EXPIRO_INCIDENT_2026-10-22.md](EXPIRO_INCIDENT_2026-10-22.md) | What happened, root cause, confirmed facts vs hypotheses, timeline, current infected inventory |
+| [EXPIRO_TECHNICAL_REFERENCE.md](EXPIRO_TECHNICAL_REFERENCE.md) | How Expiro really infects files (validated on exact clean/infected pairs), persistence, reinfection paths, sources |
+| [DISINFECTION_PROCEDURE.md](DISINFECTION_PROCEDURE.md) | Safe step-by-step remediation (admin/reboot steps marked) and verification criteria |
+| [INVESTIGATION_CHECKLIST.md](INVESTIGATION_CHECKLIST.md) | Evidence-first checklist, with what is done and what still needs admin |
+| [AV_CHANGES_2026-10-22.md](AV_CHANGES_2026-10-22.md) | GSM Shield code changes, tests, false-positive risks, limitations |
+| [logs/2026-10-22/](logs/2026-10-22/) | Raw evidence (Defender history, services, scans, process timeline) |
+| [tools/Expiro-StructScan.ps1](tools/Expiro-StructScan.ps1), [tools/Collect-ExpiroEvidence.ps1](tools/Collect-ExpiroEvidence.ps1), [tools/validate-structural.js](tools/validate-structural.js) | Read-only scanner and evidence collector |
+
+Key facts for agents continuing this work:
+- `C:\Program Files\Git` on this machine is infected. **Do not run Git Bash, git.exe or the Bash tool** until Git is reinstalled on a verified-clean system. Use `powershell.exe` (verify its signature first).
+- Repository `assets/clamav/*.exe` must match `assets/clamav/clamav-binaries.sha256.json` (`node bin/gsmshield.js verify-binaries`). They were committed infected in `88d29a0`.
+- Remediation is replacement/quarantine only; in-place "repair" of Expiro is not supported by design.
+- Do not claim the system is clean until every check in DISINFECTION_PROCEDURE §6 passes.
+
+---
+
+# HISTORICAL README (before 2026-10-22)
 # Win32/Expiro.EK!MTB Research Project
 
 > **FOR AI AGENTS:** This README follows a standard format for tracking malware research progress. Read this document to understand the project goal, current status, completed work, and next steps. All information needed to continue this research is documented here.
