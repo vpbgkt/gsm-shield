@@ -128,6 +128,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   expiroScanFiles:           invoke('expiro:scan-files'),
   // expiro:scan-directory { dirPath, maxDepth? } → { success, results, summary }
   expiroScanDirectory:       invoke('expiro:scan-directory'),
+  // expiro:pick-path { type: 'dir' | 'file' } → { success, canceled, path }
+  expiroPickPath:            invoke('expiro:pick-path'),
   // expiro:disinfect-file { filePath, detection } → { success, result }
   expiroDisinfectFile:       invoke('expiro:disinfect-file'),
   // expiro:disinfect-batch { detections } → { success, result }

@@ -405,6 +405,28 @@ function register(ipcMain, { getQuarantine, getMainWindow }) {
   });
 
   /**
+   * Open a native folder/file picker so the user can select an Expiro scan
+   * target instead of typing the path by hand.
+   * @param {{ type?: 'dir' | 'file' }} opts
+   */
+  ipcMain.handle('expiro:pick-path', async (event, { type = 'dir' } = {}) => {
+    try {
+      const { dialog } = require('electron');
+      const win = getMainWindow();
+      const result = await dialog.showOpenDialog(win, {
+        title: type === 'file' ? 'Select a PE file to scan' : 'Select a folder to scan',
+        properties: type === 'file' ? ['openFile'] : ['openDirectory'],
+      });
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return { success: true, canceled: true, path: null };
+      }
+      return { success: true, canceled: false, path: result.filePaths[0] };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  /**
    * Get current Expiro heuristic detection configuration
    */
   ipcMain.handle('expiro:get-config', async () => {

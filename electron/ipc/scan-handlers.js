@@ -104,9 +104,15 @@ function getQuickScanPaths() {
 
 /**
  * Full-scan target: the system drive root (usually C:\).
+ *
+ * NOTE: a bare drive letter like "C:" is NOT the drive root on Windows — the OS
+ * resolves it to the *current directory* on that drive, so clamscan --recursive
+ * would only scan the process CWD instead of the whole disk. Append a trailing
+ * separator so the target is the actual root ("C:\").
  */
 function getFullScanPath() {
-  return process.env.SystemDrive || 'C:';
+  const drive = process.env.SystemDrive || 'C:';
+  return drive.endsWith('\\') ? drive : drive + '\\';
 }
 
 /**

@@ -42,7 +42,7 @@ export default function ExpiroScannerPanel() {
     cancelScan,
   } = useExpiroStore();
 
-  const [inputPath, setInputPath] = useState('C:\\Program Files\\Git');
+  const [inputPath, setInputPath] = useState('C:\\');
   const [targetType, setTargetType] = useState('dir'); // 'dir' | 'file'
 
   useEffect(() => {
@@ -58,6 +58,19 @@ export default function ExpiroScannerPanel() {
       await scanDirectory(inputPath.trim());
     } else {
       await scanFile(inputPath.trim());
+    }
+  };
+
+  const handleBrowse = async () => {
+    if (isScanning) return;
+    try {
+      if (!window.electronAPI?.expiroPickPath) return;
+      const res = await window.electronAPI.expiroPickPath({ type: targetType });
+      if (res && res.success && !res.canceled && res.path) {
+        setInputPath(res.path);
+      }
+    } catch (err) {
+      console.error('[ExpiroScannerPanel] path picker failed:', err);
     }
   };
 
@@ -150,11 +163,21 @@ export default function ExpiroScannerPanel() {
               type="text"
               value={inputPath}
               onChange={(e) => setInputPath(e.target.value)}
-              placeholder={targetType === 'dir' ? 'e.g. C:\\Program Files\\Git' : 'e.g. C:\\path\\to\\app.exe'}
+              placeholder={targetType === 'dir' ? 'e.g. C:\\ or C:\\Program Files' : 'e.g. C:\\path\\to\\app.exe'}
               disabled={isScanning}
               className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
             />
           </div>
+
+          <button
+            onClick={handleBrowse}
+            disabled={isScanning}
+            title={targetType === 'dir' ? 'Choose a folder to scan' : 'Choose a PE file to scan'}
+            className="flex items-center gap-2 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-900 disabled:opacity-50 text-slate-200 px-4 py-2.5 text-sm font-medium border border-slate-700 transition-colors"
+          >
+            <FolderOpen className="h-4 w-4" />
+            Browse
+          </button>
 
           {isScanning ? (
             <button
@@ -180,16 +203,16 @@ export default function ExpiroScannerPanel() {
         <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-400">
           <span className="text-slate-500 font-medium">Quick locations:</span>
           <button
-            onClick={() => { setInputPath('C:\\Program Files\\Git'); setTargetType('dir'); }}
+            onClick={() => { setInputPath('C:\\'); setTargetType('dir'); }}
             className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
           >
-            Git Binaries
+            Full C:\ Drive
           </button>
           <button
-            onClick={() => { setInputPath('C:\\Program Files\\nodejs'); setTargetType('dir'); }}
+            onClick={() => { setInputPath('C:\\Program Files'); setTargetType('dir'); }}
             className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
           >
-            Node.js
+            Program Files
           </button>
           <button
             onClick={handleQuickSystemScan}
